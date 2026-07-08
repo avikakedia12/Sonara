@@ -25,44 +25,10 @@ at standard width is retried at progressively wider line lengths.
 import argparse
 from pathlib import Path
 
-from music21 import converter, duration, note, pitch as m21pitch, stream, tie
+from music21 import converter, stream
 import music21.braille.translate as braille_translate
 
-
-def insert_with_ties(target: stream.Part, offset: float, quarter_length: float, p: m21pitch.Pitch | None) -> None:
-    """Insert a note/rest at offset, splitting non-standard durations (e.g. 1.25)
-    into consecutive tied/simple components -- Braille cells only encode simple
-    (plain or dotted) durations, not arbitrary fractional lengths."""
-    d = duration.Duration(quarter_length)
-    components = d.components if d.isComplex else (d,)
-    running_offset = offset
-    for i, comp in enumerate(components):
-        if p is None:
-            el = note.Rest()
-        else:
-            el = note.Note(p)
-            if len(components) > 1:
-                position = "start" if i == 0 else "stop" if i == len(components) - 1 else "continue"
-                el.tie = tie.Tie(position)
-        el.duration = duration.Duration(comp.quarterLength)
-        target.insert(running_offset, el)
-        running_offset += comp.quarterLength
-
-
-def skyline_melody(part: stream.Part) -> stream.Part:
-    """Collapse simultaneous notes down to the highest-sounding pitch at each offset."""
-    chordified = part.chordify()
-    melody = stream.Part()
-    for el in chordified.recurse().getElementsByClass(("Chord", "Note", "Rest")):
-        offset = el.getOffsetInHierarchy(chordified)
-        if el.isRest:
-            insert_with_ties(melody, offset, el.quarterLength, None)
-        else:
-            pitches = el.pitches if el.isChord else [el.pitch]
-            top = max(pitches)
-            insert_with_ties(melody, offset, el.quarterLength, top)
-    melody.makeNotation(inPlace=True)
-    return melody
+from notation_utils import skyline_melody, unicode_braille_to_brf
 
 
 def chunk_part(part: stream.Part, chunk_beats: float) -> list[stream.Part]:
@@ -128,7 +94,8 @@ def main():
         divisors = tuple(int(x) for x in args.quantize.split(","))
         part = part.quantize(divisors, processOffsets=True, processDurations=True)
 
-    sections = []
+    annotated_sections = []
+    raw_chunks = []
     failed = []
     for start, end, excerpt in chunk_part(part, args.chunk_beats):
         if not excerpt.flatten().notesAndRests:
@@ -139,14 +106,26 @@ def main():
             failed.append((start, end, str(exc)))
             continue
         widened = f" (widened to {line_length} cells)" if line_length != 40 else ""
-        sections.append(f"% beats {start:g}-{end:g}{widened}\n{braille_text}")
+        annotated_sections.append(f"% beats {start:g}-{end:g}{widened}\n{braille_text}")
+        raw_chunks.append(braille_text)
 
     out_path = args.out or args.input.with_suffix(".brl")
-    out_path.write_text("\n\n".join(sections), encoding="utf-8")
-    print(f"Wrote {out_path} ({len(sections)} of {len(sections) + len(failed)} chunks transcribed)")
+    out_path.write_text("\n\n".join(annotated_sections), encoding="utf-8")
+
+    # BRF is the ASCII format real embossers/braille displays expect. Unlike the
+    # .brl above, it must contain *only* braille cells -- no "% beats" comments,
+    # which would emboss as meaningless dot patterns on real hardware.
+    brf_path = out_path.with_suffix(".brf")
+    brf_content = unicode_braille_to_brf("\n\n".join(raw_chunks))
+    brf_path.write_text(brf_content, encoding="utf-8")
+
+    print(
+        f"Wrote {out_path} and {brf_path} "
+        f"({len(annotated_sections)} of {len(annotated_sections) + len(failed)} chunks transcribed)"
+    )
     if failed:
         print(f"Failed chunks (beats): {[(round(s), round(e)) for s, e, _ in failed]}")
-    print("\n\n".join(sections))
+    print("\n\n".join(annotated_sections))
 
 
 if __name__ == "__main__":
