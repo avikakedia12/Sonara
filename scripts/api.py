@@ -2,8 +2,8 @@
 """REST API for the Sonara pipeline.
 
 Thin wrappers around the reusable functions already in transcribe_audio.py,
-to_braille.py, and transpose_score.py -- no pipeline logic is duplicated
-here, only request/response handling.
+to_braille.py, transpose_score.py, and describe_score.py -- no pipeline
+logic is duplicated here, only request/response handling.
 
 Run with: uvicorn api:app --reload --port 8000
 Interactive docs at http://127.0.0.1:8000/docs once running.
@@ -15,6 +15,7 @@ not a guaranteed-accurate source. For guaranteed-accurate output, start from
 a symbolic score (MusicXML/MIDI from notation software) and call /braille or
 /transpose directly, skipping /transcribe.
 """
+import base64
 import shutil
 import tempfile
 from pathlib import Path
@@ -24,6 +25,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from music21 import converter, stream
 
 from audio_input import AUDIO_EXTENSIONS
+from describe_score import build_description, speak_description
 from to_braille import transcribe_to_braille
 from transcribe_audio import transcribe
 from transpose_score import INSTRUMENT_REGISTRY, transpose_for_instrument
@@ -177,15 +179,49 @@ async def transpose_endpoint(
 
 
 @app.post("/describe")
-async def describe_endpoint(score: UploadFile = File(...)):
-    """Not implemented yet -- see README status."""
-    raise HTTPException(status_code=501, detail="The /describe endpoint is not implemented yet.")
+async def describe_endpoint(
+    score: UploadFile = File(..., description="MusicXML/MIDI/etc. score, OR a raw audio file (wav/mp3/etc.) to transcribe first"),
+    level: str = Form("standard", description="brief | standard | detailed"),
+    speak: bool = Form(False, description="Also render the description to speech audio (base64 AIFF in the response)"),
+    transcribe_quantize: Optional[int] = Form(None, description="If input is audio: beat-grid subdivisions, e.g. 4 (ignored for symbolic input)"),
+    onset_threshold: Optional[float] = Form(None, description="If input is audio: fix a threshold instead of adaptive selection"),
+    frame_threshold: Optional[float] = Form(None),
+):
+    """Score or audio -> structural text description, optionally spoken aloud."""
+    if level not in ("brief", "standard", "detailed"):
+        raise HTTPException(status_code=422, detail="level must be one of: brief, standard, detailed")
+
+    upload_path = _save_upload(score, ".musicxml")
+    score_path, accuracy_note = _maybe_transcribe(upload_path, transcribe_quantize, onset_threshold, frame_threshold)
+
+    parsed = converter.parse(str(score_path))
+    if not isinstance(parsed, stream.Score):
+        wrapped = stream.Score()
+        wrapped.insert(0, parsed)
+        parsed = wrapped
+
+    description = build_description(parsed, level)
+
+    response = {"description": description, "level": level}
+    if accuracy_note:
+        response["accuracy_note"] = accuracy_note
+
+    if speak:
+        tts_path = score_path.parent / "description.aiff"
+        try:
+            speak_description(description, tts_path)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        response["audio_base64"] = base64.b64encode(tts_path.read_bytes()).decode("ascii")
+        response["audio_format"] = "aiff"
+
+    return response
 
 
 @app.get("/")
 async def root():
     return {
         "name": "Sonara",
-        "endpoints": ["/transcribe", "/braille", "/transpose", "/describe (not implemented)"],
+        "endpoints": ["/transcribe", "/braille", "/transpose", "/describe"],
         "docs": "/docs",
     }

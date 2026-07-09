@@ -4,14 +4,14 @@ Sonara turns an audio recording of a piece of music into Braille sheet music, so
 
 ## Pipeline
 
-Audio goes through several stages, each usable as a standalone script today and mapped to a planned API endpoint:
+Audio goes through several stages, each usable as a standalone script and also exposed as an API endpoint (see [API](#api-scriptsapipy) below):
 
 | Stage | Script | Status |
 |---|---|---|
 | Transcribe: audio → notated score | `scripts/transcribe_audio.py` | Working |
 | Braille: score → Braille Music Code | `scripts/to_braille.py` | Working |
 | Transpose: score → transposed score for a target instrument | `scripts/transpose_score.py` | Working |
-| Describe: score → spoken structural description | *(planned)* | Not started |
+| Describe: score → structural description (+ optional spoken audio) | `scripts/describe_score.py` | Working |
 
 ### 1. Transcribe (`scripts/transcribe_audio.py`)
 
@@ -81,9 +81,28 @@ python scripts/transpose_score.py data/sample/1727_clip30.wav --target-instrumen
 
 Supported instruments: `flute`, `oboe`, `clarinet`, `bassoon`, `alto_sax`, `tenor_sax`, `trumpet`, `horn`, `violin`, `viola`, `cello`, `contrabass`, `piano`, `english_horn`.
 
-### 4. Describe *(planned)*
+### 4. Describe (`scripts/describe_score.py`)
 
-MusicXML → structural text description → spoken-audio rendering (e.g. via TTS), at multiple detail levels.
+MusicXML/MIDI/etc. (or a raw audio file) → structural text description, at multiple detail levels — meant to orient a blind musician (title, instrumentation, key, time signature, tempo, length) before they read the piece note-by-note in Braille.
+
+- `--level brief`: header, key, time signature, tempo, measure count/duration.
+- `--level standard` *(default)*: + per-part pitch range and dynamics used.
+- `--level detailed`: + a full measure-by-measure log of every tempo/time-signature/dynamic change.
+
+Key is read from an explicit key signature if the score has one; otherwise it's *estimated* via music21's Krumhansl-Schmuckler key-finding algorithm and labeled `(estimated)` — a best guess, not ground truth, and can be wrong on ambiguous or modulating material. Duration is likewise an estimate (total length ÷ the first tempo marking, ignoring any later tempo changes) — good enough for "about three minutes," not a stopwatch-precise figure.
+
+Same audio-input handling as Braille/Transpose: an audio file extension runs through `transcribe_audio.transcribe` first, with the same accuracy caveats.
+
+```bash
+python scripts/describe_score.py data/transcribed/my_piece.musicxml --level detailed
+```
+
+`--speak` additionally renders the description to speech audio via [pyttsx3](https://pypi.org/project/pyttsx3/) (offline/local TTS, no network calls, no dataset/training involved — optional dependency, only needed for `--speak`):
+
+```bash
+pip install pyttsx3
+python scripts/describe_score.py data/transcribed/my_piece.musicxml --speak --tts-out my_piece_description.aiff
+```
 
 ## Accuracy work
 
@@ -120,7 +139,7 @@ This was investigated further with a broader 7-piece calibration set spanning so
 
 ## API (`scripts/api.py`)
 
-A FastAPI service wrapping the three working pipeline stages as REST endpoints — thin request/response handling only, no logic duplicated from the scripts above.
+A FastAPI service wrapping the four working pipeline stages as REST endpoints — thin request/response handling only, no logic duplicated from the scripts above.
 
 ```bash
 uvicorn api:app --reload --port 8000
@@ -132,9 +151,9 @@ uvicorn api:app --reload --port 8000
 | `POST /transcribe` | audio file (+ optional `quantize`, `title`, thresholds) | `{musicxml, polyphony, thresholds_used, tempo_bpm, accuracy_note}` |
 | `POST /braille` | score file *or* audio file (+ `part_index`, `melody_only`, `quantize`, `chunk_beats`, and if audio: `transcribe_quantize`, thresholds) | `{brl, brf, chunks_transcribed, chunks_total, failed_chunks, accuracy_note if input was audio}` |
 | `POST /transpose` | score file *or* audio file + `target_instrument` (+ `part_index`, and if audio: `quantize`, thresholds) | `{musicxml, target_instrument, playable_range, out_of_range_notes, accuracy_note if input was audio}` |
-| `POST /describe` | score file | `501 Not Implemented` — honest placeholder, not implemented yet |
+| `POST /describe` | score file *or* audio file (+ `level`, `speak`, and if audio: `transcribe_quantize`, thresholds) | `{description, level, accuracy_note if input was audio, audio_base64 + audio_format if speak=true}` |
 
-`/transcribe`'s response always includes `accuracy_note`, since transcription accuracy is best-effort (see Accuracy work below) — the API doesn't let that caveat get silently lost the way a bare file download would. `/braille` and `/transpose` include the same `accuracy_note` when their input was audio (they transcribe internally first), and omit it when given a symbolic score directly.
+`/transcribe`'s response always includes `accuracy_note`, since transcription accuracy is best-effort (see Accuracy work below) — the API doesn't let that caveat get silently lost the way a bare file download would. `/braille`, `/transpose`, and `/describe` include the same `accuracy_note` when their input was audio (they transcribe internally first), and omit it when given a symbolic score directly. `/describe`'s `speak=true` requires `pyttsx3` to be installed server-side (see Setup) and returns the rendered speech as base64-encoded AIFF.
 
 ## Setup
 
@@ -143,6 +162,12 @@ pip install librosa numpy music21 basic-pitch mir_eval fastapi uvicorn python-mu
 ```
 
 (`basic-pitch` pulls in `pretty_midi` and a TensorFlow/CoreML/ONNX backend as transitive dependencies, depending on platform.)
+
+`pyttsx3` is an additional, optional dependency needed only for Describe's `--speak`/`speak=true` speech rendering:
+
+```bash
+pip install pyttsx3
+```
 
 ## Layout
 
@@ -154,4 +179,4 @@ archive/     raw MusicNet download (audio, labels, MIDI, metadata) used to regen
 
 ## Status
 
-Early-stage. Transcribe → Braille → Transpose all work end-to-end on sample audio, with an evaluation harness against real ground truth for transcription accuracy; describe is not yet implemented.
+Early-stage. Transcribe → Braille → Transpose → Describe all work end-to-end on sample audio, with an evaluation harness against real ground truth for transcription accuracy. No automated test suite yet — verified via manual smoke tests of each script/endpoint.
