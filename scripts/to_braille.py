@@ -58,6 +58,60 @@ def transcribe_with_retry(excerpt: stream.Part, line_lengths=(40, 80, 160, 320))
     raise last_exc
 
 
+def transcribe_to_braille(
+    input_path: Path,
+    part_index: int = 0,
+    melody_only: bool = False,
+    quantize: str | None = None,
+    chunk_beats: float = 40.0,
+) -> dict:
+    """Core braille-transcription logic, usable as a library call (e.g. from
+    the API layer) as well as from the CLI below. Returns a dict with the
+    annotated .brl text, raw BRF text, and any per-chunk failures -- callers
+    decide whether to write files or return the content directly."""
+    score = converter.parse(str(input_path))
+    parts = score.parts if score.parts else [score]
+    if part_index >= len(parts):
+        raise ValueError(f"Score only has {len(parts)} part(s); part_index {part_index} out of range")
+    part = parts[part_index]
+
+    if melody_only:
+        part = skyline_melody(part)
+
+    if quantize:
+        divisors = tuple(int(x) for x in quantize.split(","))
+        part = part.quantize(divisors, processOffsets=True, processDurations=True)
+
+    annotated_sections = []
+    raw_chunks = []
+    failed = []
+    for start, end, excerpt in chunk_part(part, chunk_beats):
+        if not excerpt.flatten().notesAndRests:
+            continue
+        try:
+            braille_text, line_length = transcribe_with_retry(excerpt)
+        except Exception as exc:  # noqa: BLE001 - report and keep going across chunks
+            failed.append((start, end, str(exc)))
+            continue
+        widened = f" (widened to {line_length} cells)" if line_length != 40 else ""
+        annotated_sections.append(f"% beats {start:g}-{end:g}{widened}\n{braille_text}")
+        raw_chunks.append(braille_text)
+
+    brl_text = "\n\n".join(annotated_sections)
+    # BRF is the ASCII format real embossers/braille displays expect. Unlike the
+    # .brl above, it must contain *only* braille cells -- no "% beats" comments,
+    # which would emboss as meaningless dot patterns on real hardware.
+    brf_text = unicode_braille_to_brf("\n\n".join(raw_chunks))
+
+    return {
+        "brl_text": brl_text,
+        "brf_text": brf_text,
+        "chunks_transcribed": len(annotated_sections),
+        "chunks_total": len(annotated_sections) + len(failed),
+        "failed_chunks": [(round(s), round(e), msg) for s, e, msg in failed],
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path, help="Path to a MusicXML/MIDI/etc. score")
@@ -81,51 +135,23 @@ def main():
     parser.add_argument("--out", type=Path, default=None, help="Output .brl path")
     args = parser.parse_args()
 
-    score = converter.parse(str(args.input))
-    parts = score.parts if score.parts else [score]
-    if args.part_index >= len(parts):
-        raise SystemExit(f"Score only has {len(parts)} part(s); --part-index {args.part_index} out of range")
-    part = parts[args.part_index]
-
-    if args.melody_only:
-        part = skyline_melody(part)
-
-    if args.quantize:
-        divisors = tuple(int(x) for x in args.quantize.split(","))
-        part = part.quantize(divisors, processOffsets=True, processDurations=True)
-
-    annotated_sections = []
-    raw_chunks = []
-    failed = []
-    for start, end, excerpt in chunk_part(part, args.chunk_beats):
-        if not excerpt.flatten().notesAndRests:
-            continue
-        try:
-            braille_text, line_length = transcribe_with_retry(excerpt)
-        except Exception as exc:  # noqa: BLE001 - report and keep going across chunks
-            failed.append((start, end, str(exc)))
-            continue
-        widened = f" (widened to {line_length} cells)" if line_length != 40 else ""
-        annotated_sections.append(f"% beats {start:g}-{end:g}{widened}\n{braille_text}")
-        raw_chunks.append(braille_text)
+    try:
+        result = transcribe_to_braille(
+            args.input, args.part_index, args.melody_only, args.quantize, args.chunk_beats
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc))
 
     out_path = args.out or args.input.with_suffix(".brl")
-    out_path.write_text("\n\n".join(annotated_sections), encoding="utf-8")
+    out_path.write_text(result["brl_text"], encoding="utf-8")
 
-    # BRF is the ASCII format real embossers/braille displays expect. Unlike the
-    # .brl above, it must contain *only* braille cells -- no "% beats" comments,
-    # which would emboss as meaningless dot patterns on real hardware.
     brf_path = out_path.with_suffix(".brf")
-    brf_content = unicode_braille_to_brf("\n\n".join(raw_chunks))
-    brf_path.write_text(brf_content, encoding="utf-8")
+    brf_path.write_text(result["brf_text"], encoding="utf-8")
 
-    print(
-        f"Wrote {out_path} and {brf_path} "
-        f"({len(annotated_sections)} of {len(annotated_sections) + len(failed)} chunks transcribed)"
-    )
-    if failed:
-        print(f"Failed chunks (beats): {[(round(s), round(e)) for s, e, _ in failed]}")
-    print("\n\n".join(annotated_sections))
+    print(f"Wrote {out_path} and {brf_path} ({result['chunks_transcribed']} of {result['chunks_total']} chunks transcribed)")
+    if result["failed_chunks"]:
+        print(f"Failed chunks (beats): {[(s, e) for s, e, _ in result['failed_chunks']]}")
+    print(result["brl_text"])
 
 
 if __name__ == "__main__":

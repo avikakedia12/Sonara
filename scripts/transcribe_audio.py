@@ -87,8 +87,14 @@ def transcribe(
     quantize: int | None = None,
     onset_threshold: float | None = None,
     frame_threshold: float | None = None,
-) -> Path:
+) -> dict:
+    """Returns a dict: {"path": Path to written MusicXML, "polyphony": float | None,
+    "thresholds_used": dict | None, "tempo_bpm": float | None} -- metadata is
+    None where it wasn't computed (e.g. thresholds_used when fixed thresholds
+    were passed in rather than adaptively selected)."""
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    polyphony = thresholds_used = tempo_bpm = None
 
     if onset_threshold is None and frame_threshold is None:
         _, polyphony, midi_data, thresholds_used = predict_notes_adaptive(audio_path)
@@ -119,7 +125,12 @@ def transcribe(
     musicxml_path = out_dir / f"{audio_path.stem}.musicxml"
     score.write("musicxml", fp=str(musicxml_path))
 
-    return musicxml_path
+    return {
+        "path": musicxml_path,
+        "polyphony": polyphony,
+        "thresholds_used": thresholds_used,
+        "tempo_bpm": tempo_bpm,
+    }
 
 
 def main():
@@ -146,10 +157,10 @@ def main():
     )
     args = parser.parse_args()
 
-    musicxml_path = transcribe(
+    result = transcribe(
         args.audio, args.out_dir, args.title, args.quantize, args.onset_threshold, args.frame_threshold
     )
-    print(f"Wrote {musicxml_path}")
+    print(f"Wrote {result['path']}")
 
 
 if __name__ == "__main__":

@@ -82,9 +82,11 @@ MusicXML → structural text description → spoken-audio rendering (e.g. via TT
 | Tier | Weight | Examples |
 |---|---|---|
 | 1 — Catastrophic | 16 | Wrong key signature; systematic octave errors (affecting a large share of notes) |
-| 2 — Severe | 8 | Isolated octave errors; clustered runs (≥3) of missing/extra notes; tempo off by >15 BPM |
+| 2 — Severe | 8 | Isolated octave errors; clustered runs (≥3) of missing/extra notes |
 | 3 — Moderate | 2 | An isolated missing or extra note |
-| 4 — Minor | 1 | Tempo off by ≤15 BPM but noticeably |
+| 4 — Minor | 1 | Noticeable tempo deviation from the implied ground-truth BPM |
+
+Tempo is always Tier 4 here, regardless of how far off it is — an imprecise tempo marking doesn't block a blind musician from learning notes/rhythm off a Braille score the way a wrong pitch does, so it never escalates under this taxonomy. Several tier items in the full taxonomy (wrong time signature, missing clef, missing accidentals, incorrect rhythm in a motif, missing articulation, incorrect ornament) aren't measurable from MusicNet's flat note-event ground truth and are reported as N/A rather than faked — see the script's docstring for the full breakdown.
 
 `W = 16·catastrophic + 8·severe + 2·moderate + 1·minor`. Standard `mir_eval` onset+pitch F-measure is also printed alongside `W`, to show how two transcriptions with similar F-measure can have very different real-world usability. Enharmonic spelling errors are reported as N/A rather than faked — MIDI pitch numbers (used for note-event comparison) don't carry spelling information (F♯ and G♭ are both 66), so that check would require diffing engraved notation, not raw pitches.
 
@@ -104,10 +106,28 @@ basic-pitch's onset/frame detection thresholds have a measured, material-depende
 
 This was investigated further with a broader 7-piece calibration set spanning solo violin, solo piano, piano trio, wind quintet, string quartet, accompanied violin, and piano quintet. The finding: optimal thresholds don't correlate cleanly with polyphony alone (e.g. a wind quintet and a piano quintet at similar polyphony want opposite threshold adjustments), and a more granular per-piece lookup was tested but performed *worse* than the current 2-point heuristic under honest leave-one-out validation. So the current calibration stands — it's a case where a data-starved "smarter" model generalizes worse than a simpler one, not a bug. Improving this further would need either substantially more ground-truth calibration data, a better predictive signal than polyphony (e.g. an instrument/genre classifier), or source-separation preprocessing to reduce polyphony before transcription — all future work.
 
+## API (`scripts/api.py`)
+
+A FastAPI service wrapping the three working pipeline stages as REST endpoints — thin request/response handling only, no logic duplicated from the scripts above.
+
+```bash
+uvicorn api:app --reload --port 8000
+# interactive docs at http://127.0.0.1:8000/docs
+```
+
+| Endpoint | Input | Output |
+|---|---|---|
+| `POST /transcribe` | audio file (+ optional `quantize`, `title`, thresholds) | `{musicxml, polyphony, thresholds_used, tempo_bpm, accuracy_note}` |
+| `POST /braille` | score file (+ `part_index`, `melody_only`, `quantize`, `chunk_beats`) | `{brl, brf, chunks_transcribed, chunks_total, failed_chunks}` |
+| `POST /transpose` | score file + `target_instrument` (+ `part_index`) | `{musicxml, target_instrument, playable_range, out_of_range_notes}` |
+| `POST /describe` | score file | `501 Not Implemented` — honest placeholder, not implemented yet |
+
+`/transcribe`'s response always includes `accuracy_note`, since transcription accuracy is best-effort (see Accuracy work below) — the API doesn't let that caveat get silently lost the way a bare file download would.
+
 ## Setup
 
 ```bash
-pip install librosa numpy music21 basic-pitch mir_eval
+pip install librosa numpy music21 basic-pitch mir_eval fastapi uvicorn python-multipart
 ```
 
 (`basic-pitch` pulls in `pretty_midi` and a TensorFlow/CoreML/ONNX backend as transitive dependencies, depending on platform.)
