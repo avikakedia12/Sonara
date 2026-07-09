@@ -10,7 +10,7 @@ Audio goes through several stages, each usable as a standalone script today and 
 |---|---|---|
 | Transcribe: audio → notated score | `scripts/transcribe_audio.py` | Working |
 | Braille: score → Braille Music Code | `scripts/to_braille.py` | Working |
-| Transpose: score → transposed score for a target instrument | *(planned)* | Not started |
+| Transpose: score → transposed score for a target instrument | `scripts/transpose_score.py` | Working |
 | Describe: score → spoken structural description | *(planned)* | Not started |
 
 ### 1. Transcribe (`scripts/transcribe_audio.py`)
@@ -55,10 +55,23 @@ Output: two files next to `--out` (or next to the input if `--out` is omitted):
 - `.brl` — Unicode Braille with `% beats N-M` section headers, for reading/debugging.
 - `.brf` — ASCII BRF (NABCC-encoded via `scripts/notation_utils.py`), containing *only* braille cells with no comments — the format real embossers and Braille displays expect.
 
-### 3–4. Transpose / Describe *(planned)*
+### 3. Transpose (`scripts/transpose_score.py`)
 
-- **Transpose**: MusicXML + target instrument → transposed MusicXML/BRF, range-checked against the target instrument.
-- **Describe**: MusicXML → structural text description → spoken-audio rendering (e.g. via TTS), at multiple detail levels.
+MusicXML/MIDI/etc. + target instrument → transposed MusicXML, range-checked against that instrument. This is a deterministic music-theory operation, not a model — no dataset or training involved, unlike transcription.
+
+The part is normalized to sounding (concert) pitch via `music21`'s `toSoundingPitch` (a no-op if it wasn't already transposed), retargeted to the requested instrument, then converted to that instrument's written pitch via `toWrittenPitch` — which uses `music21`'s built-in transposition interval for the instrument (e.g. B♭ clarinet is written a major 2nd above concert pitch). Notes that fall outside the target instrument's playable range are flagged in the output report but **not** altered — no silent octave-shifting or dropping; that's a judgment call for a human, not something to guess at.
+
+Playable ranges are hand-curated (`INSTRUMENT_REGISTRY` in the script) from standard orchestration references, since `music21`'s built-in `Instrument` classes reliably provide a `lowestNote` but almost never a `highestNote`.
+
+```bash
+python scripts/transpose_score.py data/transcribed/my_piece.musicxml --target-instrument clarinet --out my_piece_clarinet.musicxml
+```
+
+Supported instruments: `flute`, `oboe`, `clarinet`, `bassoon`, `alto_sax`, `tenor_sax`, `trumpet`, `horn`, `violin`, `viola`, `cello`, `contrabass`, `piano`, `english_horn`.
+
+### 4. Describe *(planned)*
+
+MusicXML → structural text description → spoken-audio rendering (e.g. via TTS), at multiple detail levels.
 
 ## Accuracy work
 
@@ -109,4 +122,4 @@ archive/     raw MusicNet download (audio, labels, MIDI, metadata) used to regen
 
 ## Status
 
-Early-stage. The transcribe → Braille path works end-to-end on sample audio, with an evaluation harness against real ground truth; transpose and describe are not yet implemented.
+Early-stage. Transcribe → Braille → Transpose all work end-to-end on sample audio, with an evaluation harness against real ground truth for transcription accuracy; describe is not yet implemented.
