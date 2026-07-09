@@ -7,20 +7,50 @@ piece functionally unusable for a blind musician, while eight enharmonic
 spelling quirks barely register -- but F-measure weighs those the same. This
 scorer doesn't.
 
-Tiers:
-  1 Catastrophic (16): wrong key signature, systematic octave errors
-                        (an octave slip affecting a large share of notes)
-  2 Severe        (8): isolated octave errors, clustered runs (>=3) of
-                        missing/extra notes, tempo off by more than 15 BPM
-  3 Moderate       (2): an isolated missing or extra note
-  4 Minor          (1): tempo off by a little (<=15 BPM but noticeably)
+Taxonomy (source: Pillar 1 research -- categorizes every error by how badly
+it affects a blind musician, not by how "different" it is from ground truth):
+
+  Tier 1 Catastrophic (16): wrong key signature, wrong time signature,
+                            missing clef, systematic octave errors.
+                            Makes the entire piece unusable.
+  Tier 2 Severe        (8): missing accidentals in a passage, incorrect
+                            rhythm in a motif, wrong notes in Braille
+                            measures. Makes specific sections unlearnable.
+  Tier 3 Moderate       (2): single wrong note, missing articulation,
+                            incorrect ornament. Needs extra listening but
+                            doesn't block learning.
+  Tier 4 Minor          (1): enharmonic spelling differences, imprecise
+                            tempo markings. Doesn't affect learning at all.
 
   W = 16*catastrophic + 8*severe + 2*moderate + 1*minor
 
-Enharmonic spelling (also Tier 4 in the taxonomy) isn't scored here: MIDI
-pitch numbers don't carry spelling information (F# and Gb are both 66), so
-it can't be measured from note-event comparison alone -- would need to diff
-engraved notation, not raw pitches. Reported as N/A rather than faked.
+What this scorer can actually measure: MusicNet's ground truth is a flat
+(start_time, end_time, pitch) note list, not engraved notation, so only some
+of the taxonomy is checkable from it --
+
+  MEASURED:
+    Tier 1: wrong key signature (estimated from matched notes); systematic
+            octave errors (>=25% of pitch-level matches, >=5 of them, are
+            octave-shifted)
+    Tier 2: isolated (non-systematic) octave errors; clustered runs (>=3) of
+            consecutive missing/extra notes, as a note-level proxy for
+            "wrong notes in Braille measures" -- an approximation, not an
+            actual rendered-Braille diff
+    Tier 3: isolated missing/extra note, as a proxy for "single wrong note"
+    Tier 4: tempo deviation from the implied ground-truth BPM. Any
+            noticeable tempo difference is Tier 4 here, never Tier 1/2 --
+            tempo doesn't block learning notes/rhythm from Braille the way
+            wrong pitches do, so it can't be catastrophic or severe under
+            this taxonomy
+
+  NOT MEASURED, reported as N/A rather than faked: wrong time signature,
+  missing clef, missing accidentals, incorrect rhythm in a motif, missing
+  articulation, incorrect ornament, enharmonic spelling. None of these are
+  recoverable from MIDI pitch numbers / a flat note-event list -- MIDI pitch
+  66 is both F# and Gb, and a flat note list has no articulation, ornament,
+  time signature, or clef information at all. Checking these honestly would
+  need engraved notation (a real MusicXML with that detail) as ground truth,
+  which MusicNet's label CSVs don't provide.
 
 Standard mir_eval onset+pitch F-measure is also printed alongside W, to show
 concretely how two transcriptions with a similar F-measure can have very
@@ -195,7 +225,7 @@ def main():
         catastrophic += 1
         notes_log.append(f"[Tier 1] Key mismatch: ground truth {ref_key} vs. estimate {est_key}")
 
-    # --- Tier 2: isolated octave errors (if not systematic), note-run clusters, tempo way off ---
+    # --- Tier 2: isolated octave errors (if not systematic), note-run clusters ---
     if not systematic_octave:
         severe += len(octave_matches)
         if octave_matches:
@@ -222,15 +252,16 @@ def main():
             else:
                 moderate += len(c)
 
+    # --- Tier 4: tempo is always minor under this taxonomy, regardless of how
+    # far off it is -- an imprecise tempo marking doesn't block a blind
+    # musician from learning the notes/rhythm off a Braille score the way a
+    # wrong pitch does, so it never escalates to Tier 1/2 here.
     true_bpm = implied_tempo_bpm(args.ground_truth_csv, args.max_seconds)
     if args.detected_bpm is not None and true_bpm is not None:
         bpm_diff = abs(args.detected_bpm - true_bpm)
-        if bpm_diff > 15:
-            severe += 1
-            notes_log.append(f"[Tier 2] Tempo way off: detected {args.detected_bpm:.1f} BPM vs. implied {true_bpm:.1f} BPM")
-        elif bpm_diff > 3:
+        if bpm_diff > 3:
             minor += 1
-            notes_log.append(f"[Tier 4] Tempo slightly off: detected {args.detected_bpm:.1f} BPM vs. implied {true_bpm:.1f} BPM")
+            notes_log.append(f"[Tier 4] Imprecise tempo marking: detected {args.detected_bpm:.1f} BPM vs. implied {true_bpm:.1f} BPM")
 
     if moderate:
         notes_log.append(f"[Tier 3] {moderate} isolated missing/extra note(s)")
@@ -245,8 +276,14 @@ def main():
     print(f"Tier 2 (severe):       {severe}")
     print(f"Tier 3 (moderate):     {moderate}")
     print(f"Tier 4 (minor):        {minor}")
-    print(f"Tier 4 (enharmonic spelling): N/A -- not measurable from MIDI pitch numbers alone")
     print(f"\nWeighted score W = {W}")
+
+    print("\nNot measurable from MusicNet's flat note-event ground truth (reported")
+    print("N/A rather than faked -- would need engraved notation as ground truth):")
+    print("  Tier 1: wrong time signature, missing clef")
+    print("  Tier 2: missing accidentals in a passage, incorrect rhythm in a motif")
+    print("  Tier 3: missing articulation, incorrect ornament")
+    print("  Tier 4: enharmonic spelling (MIDI pitch 66 is both F# and Gb)")
 
     f_scores = standard_f_measure(ref, est)
     print(
