@@ -11,6 +11,15 @@ which is fine for playback (MIDI) but not for notation: without quantization,
 downstream steps like the Braille converter fail on non-standard durations.
 --quantize detects the beat grid with librosa (tempo + beat times) and snaps
 each note's start/duration onto that grid, in beat-fraction subdivisions.
+
+Default onset/frame thresholds are tuned above basic-pitch's stock defaults
+(onset 0.5->0.65, frame 0.3->0.25). On a dense multi-instrument recording
+(MusicNet #1727, a Schubert piano quintet), this raised note transcription
+F-measure from 0.220 to 0.291 against MusicNet's ground truth -- mostly by
+cutting spurious note detections (precision 0.197 -> 0.316) with recall
+roughly unchanged. See evaluate_transcription.py. Override with
+--onset-threshold/--frame-threshold if working with sparser material (e.g.
+solo instrument), where the stock defaults may do better.
 """
 import argparse
 from pathlib import Path
@@ -69,13 +78,25 @@ def quantize_to_score(midi_data, beat_times: np.ndarray, tempo_bpm: float, subdi
     return score
 
 
-def transcribe(audio_path: Path, out_dir: Path, title: str | None = None, quantize: int | None = None) -> Path:
+def transcribe(
+    audio_path: Path,
+    out_dir: Path,
+    title: str | None = None,
+    quantize: int | None = None,
+    onset_threshold: float = 0.65,
+    frame_threshold: float = 0.25,
+) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     from basic_pitch.inference import predict
     from basic_pitch import ICASSP_2022_MODEL_PATH
 
-    _, midi_data, _ = predict(str(audio_path), model_or_model_path=ICASSP_2022_MODEL_PATH)
+    _, midi_data, _ = predict(
+        str(audio_path),
+        model_or_model_path=ICASSP_2022_MODEL_PATH,
+        onset_threshold=onset_threshold,
+        frame_threshold=frame_threshold,
+    )
 
     if quantize:
         tempo_bpm, beat_times = estimate_beat_times(audio_path)
@@ -109,9 +130,19 @@ def main():
         metavar="SUBDIVISIONS",
         help="Snap notes to a detected beat grid, e.g. 4 = sixteenth-note grid (omit for raw unquantized timing)",
     )
+    parser.add_argument(
+        "--onset-threshold", type=float, default=0.65,
+        help="basic-pitch onset detection threshold (default tuned for dense/multi-instrument audio; stock default is 0.5)",
+    )
+    parser.add_argument(
+        "--frame-threshold", type=float, default=0.25,
+        help="basic-pitch frame detection threshold (default tuned for dense/multi-instrument audio; stock default is 0.3)",
+    )
     args = parser.parse_args()
 
-    musicxml_path = transcribe(args.audio, args.out_dir, args.title, args.quantize)
+    musicxml_path = transcribe(
+        args.audio, args.out_dir, args.title, args.quantize, args.onset_threshold, args.frame_threshold
+    )
     print(f"Wrote {musicxml_path}")
 
 

@@ -47,11 +47,11 @@ def load_ground_truth_notes(csv_path: Path, max_seconds: float | None) -> list[d
     return sorted(notes, key=lambda n: n["start"])
 
 
-def get_estimate_notes(audio_path: Path) -> list[dict]:
+def get_estimate_notes(audio_path: Path, **predict_kwargs) -> list[dict]:
     from basic_pitch.inference import predict
     from basic_pitch import ICASSP_2022_MODEL_PATH
 
-    _, midi_data, _ = predict(str(audio_path), model_or_model_path=ICASSP_2022_MODEL_PATH)
+    _, midi_data, _ = predict(str(audio_path), model_or_model_path=ICASSP_2022_MODEL_PATH, **predict_kwargs)
     notes = []
     for instrument in midi_data.instruments:
         for n in instrument.notes:
@@ -151,10 +151,12 @@ def main():
     parser.add_argument("--audio", type=Path, required=True)
     parser.add_argument("--max-seconds", type=float, default=30.0)
     parser.add_argument("--detected-bpm", type=float, default=None, help="Reuse a previously detected tempo instead of re-running beat tracking")
+    parser.add_argument("--onset-threshold", type=float, default=0.65)
+    parser.add_argument("--frame-threshold", type=float, default=0.25)
     args = parser.parse_args()
 
     ref = load_ground_truth_notes(args.ground_truth_csv, args.max_seconds)
-    est = get_estimate_notes(args.audio)
+    est = get_estimate_notes(args.audio, onset_threshold=args.onset_threshold, frame_threshold=args.frame_threshold)
     print(f"Ground truth notes: {len(ref)}, estimated notes: {len(est)}")
 
     pitch_matches, octave_matches, missing, extra = match_notes(ref, est)
@@ -186,13 +188,24 @@ def main():
         if octave_matches:
             notes_log.append(f"[Tier 2] {len(octave_matches)} isolated octave error(s)")
 
+    # A cluster's severity scales with its size, not just its presence: one
+    # severe "unlearnable passage" event per ~3 consecutive wrong notes, so a
+    # run of 61 wrong notes scores as ~20 events, not the same 1 event as a
+    # run of 3. Without this, generating more spurious notes packed into fewer
+    # clusters could lower W without the transcription actually being better
+    # (confirmed: a deliberately noisy config minimized W under the old flat
+    # per-cluster rule despite ~4x more notes than the piece actually has).
     missing_clusters = cluster_by_time(missing)
     extra_clusters = cluster_by_time(extra)
     for label, clusters in (("missing", missing_clusters), ("extra", extra_clusters)):
         for c in clusters:
             if len(c) >= 3:
-                severe += 1
-                notes_log.append(f"[Tier 2] Cluster of {len(c)} consecutive {label} notes near t={c[0]['start']:.2f}s")
+                events = len(c) // 3
+                severe += events
+                notes_log.append(
+                    f"[Tier 2] Cluster of {len(c)} consecutive {label} notes near t={c[0]['start']:.2f}s "
+                    f"({events} severe event{'s' if events != 1 else ''})"
+                )
             else:
                 moderate += len(c)
 
