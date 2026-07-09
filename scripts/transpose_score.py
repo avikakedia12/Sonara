@@ -12,11 +12,44 @@ Notes that fall outside the target instrument's playable range are flagged
 in the report but NOT altered (no silent octave-shifting or dropping) --
 range violations are a judgment call for a human, not something to guess at
 automatically.
+
+Input may be a symbolic score (MusicXML/MIDI/etc.) OR a raw audio file
+(wav/mp3/etc., by extension -- see AUDIO_EXTENSIONS). Audio is run through
+transcribe_audio.transcribe first to get a score; this reuses that pipeline
+rather than duplicating it, so the same accuracy caveats apply (see that
+module's docstring) -- transposing straight from a symbolic score is still
+the guaranteed-accurate path.
 """
 import argparse
 from pathlib import Path
 
 from music21 import converter, instrument as m21instrument, pitch as m21pitch, stream
+
+from transcribe_audio import transcribe
+
+AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aiff", ".aif"}
+
+
+def resolve_score_path(
+    input_path: Path,
+    out_dir: Path | None = None,
+    quantize: int | None = None,
+    onset_threshold: float | None = None,
+    frame_threshold: float | None = None,
+) -> Path:
+    """If input_path is audio, transcribe it to MusicXML first and return that
+    path; otherwise return input_path unchanged. Keeps the audio->score step
+    isolated so callers that already have a symbolic score pay no extra cost."""
+    if input_path.suffix.lower() not in AUDIO_EXTENSIONS:
+        return input_path
+    result = transcribe(
+        input_path,
+        out_dir or input_path.parent,
+        quantize=quantize,
+        onset_threshold=onset_threshold,
+        frame_threshold=frame_threshold,
+    )
+    return result["path"]
 
 # Written-pitch playable ranges, hand-curated from standard orchestration
 # references (practical ranges, not extreme professional limits). music21's
@@ -68,16 +101,38 @@ def transpose_for_instrument(part: stream.Part, target_name: str) -> tuple[strea
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("input", type=Path, help="Path to a MusicXML/MIDI/etc. score")
+    parser.add_argument(
+        "input", type=Path,
+        help="Path to a MusicXML/MIDI/etc. score, or an audio file (wav/mp3/etc.) to transcribe first",
+    )
     parser.add_argument(
         "--target-instrument", required=True, choices=sorted(INSTRUMENT_REGISTRY.keys()),
         help="Instrument to transpose for",
     )
     parser.add_argument("--part-index", type=int, default=0, help="Which part to transpose")
     parser.add_argument("--out", type=Path, default=None, help="Output MusicXML path")
+    parser.add_argument(
+        "--quantize", type=int, default=None, metavar="SUBDIVISIONS",
+        help="If input is audio: snap notes to a detected beat grid, e.g. 4 (ignored for symbolic input)",
+    )
+    parser.add_argument(
+        "--onset-threshold", type=float, default=None,
+        help="If input is audio: fix a basic-pitch onset threshold instead of auto-selecting",
+    )
+    parser.add_argument(
+        "--frame-threshold", type=float, default=None,
+        help="If input is audio: fix a basic-pitch frame threshold instead of auto-selecting",
+    )
     args = parser.parse_args()
 
-    score = converter.parse(str(args.input))
+    score_path = resolve_score_path(
+        args.input, quantize=args.quantize,
+        onset_threshold=args.onset_threshold, frame_threshold=args.frame_threshold,
+    )
+    if score_path != args.input:
+        print(f"Transcribed {args.input} -> {score_path}")
+
+    score = converter.parse(str(score_path))
     parts = score.parts if score.parts else [score]
     if args.part_index >= len(parts):
         raise SystemExit(f"Score only has {len(parts)} part(s); --part-index {args.part_index} out of range")
@@ -87,7 +142,7 @@ def main():
 
     out_score = stream.Score()
     out_score.insert(0, written)
-    out_path = args.out or args.input.with_stem(f"{args.input.stem}_{args.target_instrument}")
+    out_path = args.out or args.input.with_stem(f"{args.input.stem}_{args.target_instrument}").with_suffix(".musicxml")
     out_score.write("musicxml", fp=str(out_path))
 
     _, low_str, high_str = INSTRUMENT_REGISTRY[args.target_instrument]

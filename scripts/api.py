@@ -25,7 +25,7 @@ from music21 import converter, stream
 
 from to_braille import transcribe_to_braille
 from transcribe_audio import transcribe
-from transpose_score import INSTRUMENT_REGISTRY, transpose_for_instrument
+from transpose_score import AUDIO_EXTENSIONS, INSTRUMENT_REGISTRY, transpose_for_instrument
 
 app = FastAPI(
     title="Sonara",
@@ -108,17 +108,35 @@ async def braille_endpoint(
 
 @app.post("/transpose")
 async def transpose_endpoint(
-    score: UploadFile = File(..., description="MusicXML/MIDI/etc. score"),
+    score: UploadFile = File(..., description="MusicXML/MIDI/etc. score, OR a raw audio file (wav/mp3/etc.) to transcribe first"),
     target_instrument: str = Form(..., description=f"One of: {sorted(INSTRUMENT_REGISTRY)}"),
     part_index: int = Form(0),
+    quantize: Optional[int] = Form(None, description="If input is audio: beat-grid subdivisions, e.g. 4 (ignored for symbolic input)"),
+    onset_threshold: Optional[float] = Form(None, description="If input is audio: fix a threshold instead of adaptive selection"),
+    frame_threshold: Optional[float] = Form(None),
 ):
-    """MusicXML + target instrument -> transposed MusicXML + range-violation report."""
+    """Score or audio + target instrument -> transposed MusicXML + range-violation report."""
     if target_instrument not in INSTRUMENT_REGISTRY:
         raise HTTPException(
             status_code=422,
             detail=f"Unknown instrument '{target_instrument}'. Choices: {sorted(INSTRUMENT_REGISTRY)}",
         )
-    score_path = _save_upload(score, ".musicxml")
+    upload_path = _save_upload(score, ".musicxml")
+
+    accuracy_note = None
+    if upload_path.suffix.lower() in AUDIO_EXTENSIONS:
+        try:
+            result = transcribe(upload_path, upload_path.parent / "out", None, quantize, onset_threshold, frame_threshold)
+        except Exception as exc:  # noqa: BLE001 - surface as a client-facing error
+            raise HTTPException(status_code=422, detail=f"Transcription failed: {exc}")
+        score_path = result["path"]
+        accuracy_note = (
+            "Input was audio, transcribed with best-effort accuracy before transposing. "
+            "For guaranteed-accurate output, provide a symbolic score instead."
+        )
+    else:
+        score_path = upload_path
+
     part = _load_part(score_path, part_index)
 
     written, out_of_range = transpose_for_instrument(part, target_instrument)
@@ -129,12 +147,15 @@ async def transpose_endpoint(
     out_score.write("musicxml", fp=str(out_path))
 
     _, low, high = INSTRUMENT_REGISTRY[target_instrument]
-    return {
+    response = {
         "musicxml": out_path.read_text(encoding="utf-8"),
         "target_instrument": target_instrument,
         "playable_range": {"low": low, "high": high},
         "out_of_range_notes": out_of_range,
     }
+    if accuracy_note:
+        response["accuracy_note"] = accuracy_note
+    return response
 
 
 @app.post("/describe")

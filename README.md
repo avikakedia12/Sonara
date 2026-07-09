@@ -57,7 +57,7 @@ Output: two files next to `--out` (or next to the input if `--out` is omitted):
 
 ### 3. Transpose (`scripts/transpose_score.py`)
 
-MusicXML/MIDI/etc. + target instrument → transposed MusicXML, range-checked against that instrument. This is a deterministic music-theory operation, not a model — no dataset or training involved, unlike transcription.
+MusicXML/MIDI/etc. (or a raw audio file) + target instrument → transposed MusicXML, range-checked against that instrument. This is a deterministic music-theory operation, not a model — no dataset or training involved, unlike transcription.
 
 The part is normalized to sounding (concert) pitch via `music21`'s `toSoundingPitch` (a no-op if it wasn't already transposed), retargeted to the requested instrument, then converted to that instrument's written pitch via `toWrittenPitch` — which uses `music21`'s built-in transposition interval for the instrument (e.g. B♭ clarinet is written a major 2nd above concert pitch). Notes that fall outside the target instrument's playable range are flagged in the output report but **not** altered — no silent octave-shifting or dropping; that's a judgment call for a human, not something to guess at.
 
@@ -65,6 +65,12 @@ Playable ranges are hand-curated (`INSTRUMENT_REGISTRY` in the script) from stan
 
 ```bash
 python scripts/transpose_score.py data/transcribed/my_piece.musicxml --target-instrument clarinet --out my_piece_clarinet.musicxml
+```
+
+If the input's extension is audio (`.wav`, `.mp3`, `.flac`, `.ogg`, `.m4a`, `.aiff`/`.aif`) it's run through `transcribe_audio.transcribe` first — same accuracy caveats as Stage 1 apply in that case (see Accuracy work below); transposing a symbolic score directly is still the guaranteed-accurate path:
+
+```bash
+python scripts/transpose_score.py data/sample/1727_clip30.wav --target-instrument clarinet --quantize 4
 ```
 
 Supported instruments: `flute`, `oboe`, `clarinet`, `bassoon`, `alto_sax`, `tenor_sax`, `trumpet`, `horn`, `violin`, `viola`, `cello`, `contrabass`, `piano`, `english_horn`.
@@ -119,10 +125,10 @@ uvicorn api:app --reload --port 8000
 |---|---|---|
 | `POST /transcribe` | audio file (+ optional `quantize`, `title`, thresholds) | `{musicxml, polyphony, thresholds_used, tempo_bpm, accuracy_note}` |
 | `POST /braille` | score file (+ `part_index`, `melody_only`, `quantize`, `chunk_beats`) | `{brl, brf, chunks_transcribed, chunks_total, failed_chunks}` |
-| `POST /transpose` | score file + `target_instrument` (+ `part_index`) | `{musicxml, target_instrument, playable_range, out_of_range_notes}` |
+| `POST /transpose` | score file *or* audio file + `target_instrument` (+ `part_index`, and if audio: `quantize`, thresholds) | `{musicxml, target_instrument, playable_range, out_of_range_notes, accuracy_note if input was audio}` |
 | `POST /describe` | score file | `501 Not Implemented` — honest placeholder, not implemented yet |
 
-`/transcribe`'s response always includes `accuracy_note`, since transcription accuracy is best-effort (see Accuracy work below) — the API doesn't let that caveat get silently lost the way a bare file download would.
+`/transcribe`'s response always includes `accuracy_note`, since transcription accuracy is best-effort (see Accuracy work below) — the API doesn't let that caveat get silently lost the way a bare file download would. `/transpose` includes the same `accuracy_note` when its input was audio (it transcribes internally first), and omits it when given a symbolic score directly.
 
 ## Setup
 
