@@ -151,12 +151,25 @@ def main():
     parser.add_argument("--audio", type=Path, required=True)
     parser.add_argument("--max-seconds", type=float, default=30.0)
     parser.add_argument("--detected-bpm", type=float, default=None, help="Reuse a previously detected tempo instead of re-running beat tracking")
-    parser.add_argument("--onset-threshold", type=float, default=0.65)
-    parser.add_argument("--frame-threshold", type=float, default=0.25)
+    parser.add_argument(
+        "--onset-threshold", type=float, default=None,
+        help="Fix a specific onset threshold instead of auto-selecting from estimated polyphony",
+    )
+    parser.add_argument("--frame-threshold", type=float, default=None)
     args = parser.parse_args()
 
     ref = load_ground_truth_notes(args.ground_truth_csv, args.max_seconds)
-    est = get_estimate_notes(args.audio, onset_threshold=args.onset_threshold, frame_threshold=args.frame_threshold)
+    if args.onset_threshold is not None or args.frame_threshold is not None:
+        est = get_estimate_notes(
+            args.audio,
+            onset_threshold=args.onset_threshold or 0.5,
+            frame_threshold=args.frame_threshold or 0.3,
+        )
+    else:
+        from notation_utils import predict_notes_adaptive
+
+        est, polyphony, _, thresholds_used = predict_notes_adaptive(args.audio)
+        print(f"Estimated polyphony: {polyphony:.2f} simultaneous notes/onset -> thresholds {thresholds_used}")
     print(f"Ground truth notes: {len(ref)}, estimated notes: {len(est)}")
 
     pitch_matches, octave_matches, missing, extra = match_notes(ref, est)

@@ -1,5 +1,56 @@
 """Shared helpers for building clean, Braille-safe music21 notation."""
+from pathlib import Path
+
 from music21 import duration, note, pitch as m21pitch, stream, tie
+
+
+def average_polyphony(notes: list[dict]) -> float:
+    """Average number of simultaneously-sounding notes at each note's onset --
+    a cheap proxy for how dense/polyphonic a passage is."""
+    if not notes:
+        return 0.0
+    notes = sorted(notes, key=lambda n: n["start"])
+    total = 0
+    for n in notes:
+        total += sum(1 for other in notes if other["start"] <= n["start"] < other["end"])
+    return total / len(notes)
+
+
+def predict_notes_adaptive(audio_path: Path, dense_polyphony_threshold: float = 3.4) -> tuple[list[dict], float, float, dict]:
+    """Probe with basic-pitch's stock thresholds, estimate polyphony density from
+    the result, and only re-run with higher (stricter) thresholds if the material
+    looks dense/multi-voiced -- tuned thresholds measurably help on dense chamber
+    music but measurably hurt on solo/sparse material (verified against MusicNet
+    ground truth: quintet F 0.220->0.291 with stricter thresholds, solo piano F
+    0.478->0.441, i.e. worse -- so one fixed default is wrong for both).
+
+    dense_polyphony_threshold=3.4 is interpolated from exactly two calibration
+    points (quintet ~4.15, solo piano ~2.63) -- a real cutoff, not arbitrary,
+    but only validated to bracket those two cases. Untested on other ensemble
+    sizes/genres; may need re-tuning as more material is evaluated."""
+    from basic_pitch.inference import predict
+    from basic_pitch import ICASSP_2022_MODEL_PATH
+
+    stock = dict(onset_threshold=0.5, frame_threshold=0.3)
+    _, midi_data, _ = predict(str(audio_path), model_or_model_path=ICASSP_2022_MODEL_PATH, **stock)
+    probe_notes = [
+        {"start": n.start, "end": n.end, "pitch": n.pitch}
+        for instrument in midi_data.instruments
+        for n in instrument.notes
+    ]
+    polyphony = average_polyphony(probe_notes)
+
+    if polyphony <= dense_polyphony_threshold:
+        return probe_notes, polyphony, midi_data, stock
+
+    dense = dict(onset_threshold=0.65, frame_threshold=0.25)
+    _, midi_data, _ = predict(str(audio_path), model_or_model_path=ICASSP_2022_MODEL_PATH, **dense)
+    dense_notes = [
+        {"start": n.start, "end": n.end, "pitch": n.pitch}
+        for instrument in midi_data.instruments
+        for n in instrument.notes
+    ]
+    return dense_notes, polyphony, midi_data, dense
 
 # North American Braille ASCII (NABCC) table: index i is the ASCII character
 # for the braille cell whose dot pattern equals the 6-bit mask i (bit0=dot1,
