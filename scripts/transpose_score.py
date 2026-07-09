@@ -25,31 +25,7 @@ from pathlib import Path
 
 from music21 import converter, instrument as m21instrument, pitch as m21pitch, stream
 
-from transcribe_audio import transcribe
-
-AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aiff", ".aif"}
-
-
-def resolve_score_path(
-    input_path: Path,
-    out_dir: Path | None = None,
-    quantize: int | None = None,
-    onset_threshold: float | None = None,
-    frame_threshold: float | None = None,
-) -> Path:
-    """If input_path is audio, transcribe it to MusicXML first and return that
-    path; otherwise return input_path unchanged. Keeps the audio->score step
-    isolated so callers that already have a symbolic score pay no extra cost."""
-    if input_path.suffix.lower() not in AUDIO_EXTENSIONS:
-        return input_path
-    result = transcribe(
-        input_path,
-        out_dir or input_path.parent,
-        quantize=quantize,
-        onset_threshold=onset_threshold,
-        frame_threshold=frame_threshold,
-    )
-    return result["path"]
+from audio_input import AUDIO_EXTENSIONS, resolve_score_path
 
 # Written-pitch playable ranges, hand-curated from standard orchestration
 # references (practical ranges, not extreme professional limits). music21's

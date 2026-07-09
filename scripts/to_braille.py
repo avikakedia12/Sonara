@@ -21,6 +21,13 @@ no fallback to wrap that atomic group across lines, so it throws instead. So
 whole parts are transcribed in fixed-size beat windows (which also mirrors how
 braille music is actually read: page by page), and any window that still fails
 at standard width is retried at progressively wider line lengths.
+
+Input may be a symbolic score (MusicXML/MIDI/etc.) OR a raw audio file
+(wav/mp3/etc., by extension -- see audio_input.AUDIO_EXTENSIONS). Audio is run
+through transcribe_audio.transcribe first to get a score; this reuses that
+pipeline rather than duplicating it, so the same accuracy caveats apply (see
+that module's docstring) -- transcribing from a symbolic score directly is
+still the guaranteed-accurate path.
 """
 import argparse
 from pathlib import Path
@@ -28,6 +35,7 @@ from pathlib import Path
 from music21 import converter, stream
 import music21.braille.translate as braille_translate
 
+from audio_input import resolve_score_path
 from notation_utils import skyline_melody, unicode_braille_to_brf
 
 
@@ -114,7 +122,10 @@ def transcribe_to_braille(
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("input", type=Path, help="Path to a MusicXML/MIDI/etc. score")
+    parser.add_argument(
+        "input", type=Path,
+        help="Path to a MusicXML/MIDI/etc. score, or an audio file (wav/mp3/etc.) to transcribe first",
+    )
     parser.add_argument("--part-index", type=int, default=0, help="Which part to transcribe")
     parser.add_argument(
         "--melody-only",
@@ -124,7 +135,8 @@ def main():
     parser.add_argument(
         "--quantize",
         default=None,
-        help="Quantize divisors as comma-separated ints, e.g. '4,3' (snap to 16th/triplet grid)",
+        help="Braille rhythm quantization: comma-separated divisors, e.g. '4,3' (snap to 16th/triplet grid) -- "
+             "not related to --transcribe-quantize below",
     )
     parser.add_argument(
         "--chunk-beats",
@@ -132,17 +144,36 @@ def main():
         default=40.0,
         help="Transcribe in windows of this many beats (music21's braille formatter is unreliable on long parts)",
     )
+    parser.add_argument(
+        "--transcribe-quantize", type=int, default=None, metavar="SUBDIVISIONS",
+        help="If input is audio: snap notes to a detected beat grid, e.g. 4 (ignored for symbolic input)",
+    )
+    parser.add_argument(
+        "--onset-threshold", type=float, default=None,
+        help="If input is audio: fix a basic-pitch onset threshold instead of auto-selecting",
+    )
+    parser.add_argument(
+        "--frame-threshold", type=float, default=None,
+        help="If input is audio: fix a basic-pitch frame threshold instead of auto-selecting",
+    )
     parser.add_argument("--out", type=Path, default=None, help="Output .brl path")
     args = parser.parse_args()
 
+    score_path = resolve_score_path(
+        args.input, quantize=args.transcribe_quantize,
+        onset_threshold=args.onset_threshold, frame_threshold=args.frame_threshold,
+    )
+    if score_path != args.input:
+        print(f"Transcribed {args.input} -> {score_path}")
+
     try:
         result = transcribe_to_braille(
-            args.input, args.part_index, args.melody_only, args.quantize, args.chunk_beats
+            score_path, args.part_index, args.melody_only, args.quantize, args.chunk_beats
         )
     except ValueError as exc:
         raise SystemExit(str(exc))
 
-    out_path = args.out or args.input.with_suffix(".brl")
+    out_path = args.out or score_path.with_suffix(".brl")
     out_path.write_text(result["brl_text"], encoding="utf-8")
 
     brf_path = out_path.with_suffix(".brf")

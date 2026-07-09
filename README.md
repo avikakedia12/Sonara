@@ -38,7 +38,13 @@ Output: `<out-dir>/<audio-stem>.musicxml`.
 
 ### 2. Braille (`scripts/to_braille.py`)
 
-MusicXML/MIDI/etc. → Braille Music Code, using music21's built-in Braille transcriber (implements the Music Braille Code spec). Braille music is read one line/voice at a time, so this operates on a single `Part` of the score.
+MusicXML/MIDI/etc. (or a raw audio file) → Braille Music Code, using music21's built-in Braille transcriber (implements the Music Braille Code spec). Braille music is read one line/voice at a time, so this operates on a single `Part` of the score.
+
+If the input's extension is audio (`.wav`, `.mp3`, `.flac`, `.ogg`, `.m4a`, `.aiff`/`.aif`) it's run through `transcribe_audio.transcribe` first — same accuracy caveats as Stage 1 apply in that case; transcribing from a symbolic score directly is still the guaranteed-accurate path. Use `--transcribe-quantize`/`--onset-threshold`/`--frame-threshold` to control that step (distinct from `--quantize` below, which is the braille rhythm quantization applied to the resulting score either way):
+
+```bash
+python scripts/to_braille.py data/sample/1727_clip30.wav --transcribe-quantize 4 --melody-only --out my_piece.brl
+```
 
 Raw polyphonic transcriptions (especially from an ML model) are often too dense for the Braille engine to lay out cleanly. Two options handle that:
 
@@ -124,11 +130,11 @@ uvicorn api:app --reload --port 8000
 | Endpoint | Input | Output |
 |---|---|---|
 | `POST /transcribe` | audio file (+ optional `quantize`, `title`, thresholds) | `{musicxml, polyphony, thresholds_used, tempo_bpm, accuracy_note}` |
-| `POST /braille` | score file (+ `part_index`, `melody_only`, `quantize`, `chunk_beats`) | `{brl, brf, chunks_transcribed, chunks_total, failed_chunks}` |
+| `POST /braille` | score file *or* audio file (+ `part_index`, `melody_only`, `quantize`, `chunk_beats`, and if audio: `transcribe_quantize`, thresholds) | `{brl, brf, chunks_transcribed, chunks_total, failed_chunks, accuracy_note if input was audio}` |
 | `POST /transpose` | score file *or* audio file + `target_instrument` (+ `part_index`, and if audio: `quantize`, thresholds) | `{musicxml, target_instrument, playable_range, out_of_range_notes, accuracy_note if input was audio}` |
 | `POST /describe` | score file | `501 Not Implemented` — honest placeholder, not implemented yet |
 
-`/transcribe`'s response always includes `accuracy_note`, since transcription accuracy is best-effort (see Accuracy work below) — the API doesn't let that caveat get silently lost the way a bare file download would. `/transpose` includes the same `accuracy_note` when its input was audio (it transcribes internally first), and omits it when given a symbolic score directly.
+`/transcribe`'s response always includes `accuracy_note`, since transcription accuracy is best-effort (see Accuracy work below) — the API doesn't let that caveat get silently lost the way a bare file download would. `/braille` and `/transpose` include the same `accuracy_note` when their input was audio (they transcribe internally first), and omit it when given a symbolic score directly.
 
 ## Setup
 

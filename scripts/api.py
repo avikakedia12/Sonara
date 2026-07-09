@@ -23,9 +23,10 @@ from typing import Optional
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from music21 import converter, stream
 
+from audio_input import AUDIO_EXTENSIONS
 from to_braille import transcribe_to_braille
 from transcribe_audio import transcribe
-from transpose_score import AUDIO_EXTENSIONS, INSTRUMENT_REGISTRY, transpose_for_instrument
+from transpose_score import INSTRUMENT_REGISTRY, transpose_for_instrument
 
 app = FastAPI(
     title="Sonara",
@@ -41,6 +42,29 @@ def _save_upload(upload: UploadFile, default_suffix: str) -> Path:
     with dest.open("wb") as f:
         shutil.copyfileobj(upload.file, f)
     return dest
+
+
+def _maybe_transcribe(
+    upload_path: Path,
+    transcribe_quantize: Optional[int] = None,
+    onset_threshold: Optional[float] = None,
+    frame_threshold: Optional[float] = None,
+) -> tuple[Path, Optional[str]]:
+    """If upload_path is audio, transcribe it to MusicXML first and return
+    (musicxml_path, accuracy_note); otherwise return (upload_path, None)
+    unchanged. Shared by /braille and /transpose so both accept audio or a
+    symbolic score interchangeably."""
+    if upload_path.suffix.lower() not in AUDIO_EXTENSIONS:
+        return upload_path, None
+    try:
+        result = transcribe(upload_path, upload_path.parent / "out", None, transcribe_quantize, onset_threshold, frame_threshold)
+    except Exception as exc:  # noqa: BLE001 - surface as a client-facing error
+        raise HTTPException(status_code=422, detail=f"Transcription failed: {exc}")
+    accuracy_note = (
+        "Input was audio, transcribed with best-effort accuracy first. "
+        "For guaranteed-accurate output, provide a symbolic score instead."
+    )
+    return result["path"], accuracy_note
 
 
 def _load_part(score_path: Path, part_index: int) -> stream.Part:
@@ -84,26 +108,33 @@ async def transcribe_endpoint(
 
 @app.post("/braille")
 async def braille_endpoint(
-    score: UploadFile = File(..., description="MusicXML/MIDI/etc. score"),
+    score: UploadFile = File(..., description="MusicXML/MIDI/etc. score, OR a raw audio file (wav/mp3/etc.) to transcribe first"),
     part_index: int = Form(0),
     melody_only: bool = Form(False, description="Collapse to a single top-note line (for dense/noisy input)"),
-    quantize: Optional[str] = Form(None, description="Comma-separated divisors, e.g. '4,3'"),
+    quantize: Optional[str] = Form(None, description="Braille rhythm quantization: comma-separated divisors, e.g. '4,3' (not related to transcribe_quantize below)"),
     chunk_beats: float = Form(40.0),
+    transcribe_quantize: Optional[int] = Form(None, description="If input is audio: beat-grid subdivisions, e.g. 4 (ignored for symbolic input)"),
+    onset_threshold: Optional[float] = Form(None, description="If input is audio: fix a threshold instead of adaptive selection"),
+    frame_threshold: Optional[float] = Form(None),
 ):
-    """MusicXML/MIDI -> Braille Music Code (.brl annotated text + .brf embosser-ready ASCII)."""
-    score_path = _save_upload(score, ".musicxml")
+    """Score or audio -> Braille Music Code (.brl annotated text + .brf embosser-ready ASCII)."""
+    upload_path = _save_upload(score, ".musicxml")
+    score_path, accuracy_note = _maybe_transcribe(upload_path, transcribe_quantize, onset_threshold, frame_threshold)
     try:
         result = transcribe_to_braille(score_path, part_index, melody_only, quantize, chunk_beats)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    return {
+    response = {
         "brl": result["brl_text"],
         "brf": result["brf_text"],
         "chunks_transcribed": result["chunks_transcribed"],
         "chunks_total": result["chunks_total"],
         "failed_chunks": result["failed_chunks"],
     }
+    if accuracy_note:
+        response["accuracy_note"] = accuracy_note
+    return response
 
 
 @app.post("/transpose")
@@ -122,20 +153,7 @@ async def transpose_endpoint(
             detail=f"Unknown instrument '{target_instrument}'. Choices: {sorted(INSTRUMENT_REGISTRY)}",
         )
     upload_path = _save_upload(score, ".musicxml")
-
-    accuracy_note = None
-    if upload_path.suffix.lower() in AUDIO_EXTENSIONS:
-        try:
-            result = transcribe(upload_path, upload_path.parent / "out", None, quantize, onset_threshold, frame_threshold)
-        except Exception as exc:  # noqa: BLE001 - surface as a client-facing error
-            raise HTTPException(status_code=422, detail=f"Transcription failed: {exc}")
-        score_path = result["path"]
-        accuracy_note = (
-            "Input was audio, transcribed with best-effort accuracy before transposing. "
-            "For guaranteed-accurate output, provide a symbolic score instead."
-        )
-    else:
-        score_path = upload_path
+    score_path, accuracy_note = _maybe_transcribe(upload_path, quantize, onset_threshold, frame_threshold)
 
     part = _load_part(score_path, part_index)
 
