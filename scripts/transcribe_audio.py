@@ -24,6 +24,7 @@ looks dense. Pass --onset-threshold/--frame-threshold to override and skip
 the probe.
 """
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import librosa
@@ -96,28 +97,35 @@ def transcribe(
 
     polyphony = thresholds_used = tempo_bpm = None
 
-    if onset_threshold is None and frame_threshold is None:
-        _, polyphony, midi_data, thresholds_used = predict_notes_adaptive(audio_path)
-        print(f"Estimated polyphony: {polyphony:.2f} simultaneous notes/onset -> thresholds {thresholds_used}")
-    else:
-        from basic_pitch.inference import predict
-        from basic_pitch import ICASSP_2022_MODEL_PATH
+    # Beat-tracking (librosa) and note transcription (basic-pitch) both read
+    # audio_path but don't depend on each other's output, so run librosa's
+    # beat-tracking in a background thread while the (much slower) basic-pitch
+    # inference runs on the main thread, instead of paying for both in series.
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        beat_future = executor.submit(estimate_beat_times, audio_path) if quantize else None
 
-        _, midi_data, _ = predict(
-            str(audio_path),
-            model_or_model_path=ICASSP_2022_MODEL_PATH,
-            onset_threshold=onset_threshold if onset_threshold is not None else 0.5,
-            frame_threshold=frame_threshold if frame_threshold is not None else 0.3,
-        )
+        if onset_threshold is None and frame_threshold is None:
+            _, polyphony, midi_data, thresholds_used = predict_notes_adaptive(audio_path)
+            print(f"Estimated polyphony: {polyphony:.2f} simultaneous notes/onset -> thresholds {thresholds_used}")
+        else:
+            from basic_pitch.inference import predict
+            from basic_pitch import ICASSP_2022_MODEL_PATH
 
-    if quantize:
-        tempo_bpm, beat_times = estimate_beat_times(audio_path)
-        print(f"Detected tempo: {tempo_bpm:.1f} BPM, {len(beat_times)} beats")
-        score = quantize_to_score(midi_data, beat_times, tempo_bpm, quantize)
-    else:
-        midi_path = out_dir / f"{audio_path.stem}.mid"
-        midi_data.write(str(midi_path))
-        score = converter.parse(str(midi_path))
+            _, midi_data, _ = predict(
+                str(audio_path),
+                model_or_model_path=ICASSP_2022_MODEL_PATH,
+                onset_threshold=onset_threshold if onset_threshold is not None else 0.5,
+                frame_threshold=frame_threshold if frame_threshold is not None else 0.3,
+            )
+
+        if quantize:
+            tempo_bpm, beat_times = beat_future.result()
+            print(f"Detected tempo: {tempo_bpm:.1f} BPM, {len(beat_times)} beats")
+            score = quantize_to_score(midi_data, beat_times, tempo_bpm, quantize)
+        else:
+            midi_path = out_dir / f"{audio_path.stem}.mid"
+            midi_data.write(str(midi_path))
+            score = converter.parse(str(midi_path))
 
     score.metadata = m21metadata.Metadata()
     score.metadata.title = title or audio_path.stem
