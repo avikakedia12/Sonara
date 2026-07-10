@@ -27,7 +27,7 @@ def average_polyphony(notes: list[dict]) -> float:
 
 
 def predict_notes_adaptive(
-    audio_path: Path, dense_polyphony_threshold: float = 3.4, minimum_note_length: float = 127.70
+    audio_path: Path, dense_polyphony_threshold: float = 3.4, minimum_note_length: float = 40.0
 ) -> tuple[list[dict], float, float, dict]:
     """Probe with basic-pitch's stock thresholds, estimate polyphony density from
     the result, and only re-run with higher (stricter) thresholds if the material
@@ -43,13 +43,17 @@ def predict_notes_adaptive(
 
     minimum_note_length (ms) is basic-pitch's own note-length floor -- notes
     shorter than this are dropped outright, regardless of detection confidence.
-    The 127.70ms default (basic-pitch's stock value) silently guts fast
-    passage-work: measured on a wind quintet passage with note durations as
-    short as ~55ms, dropping to 40ms raised F-measure 0.302->0.367 by recovering
-    genuine short notes the default floor was discarding. Left at the stock
-    default here since -- unlike dense_polyphony_threshold -- there's no
-    adaptive signal wired up yet to auto-detect fast material; callers who know
-    their material is fast passage-work should pass a lower value explicitly.
+    basic-pitch's stock default (127.70ms) silently guts fast passage-work.
+    40.0ms is used here instead of that stock default, based on a 7-track
+    MusicNet grid search (with leave-one-out validation, not just picking the
+    best value on the full set -- same discipline as dense_polyphony_threshold
+    above) across values from 20-127.7ms: 40ms raised average onset+pitch
+    F-measure from 0.395 to 0.413 (+6.4 points on a piano trio, +5.5 on a wind
+    quintet, at the cost of -1.6 on solo piano and -0.4 on a string quartet --
+    a net win, not uniform). Fixed threshold pairs applied uniformly across all
+    7 tracks scored *worse* on average than keeping the existing adaptive
+    per-track threshold selection, which is why this stays a flat default
+    rather than something threaded into the polyphony-based branching above.
 
     The probe and (if triggered) dense pass both need basic-pitch's neural net
     output, just decoded at different thresholds -- so the net only runs once

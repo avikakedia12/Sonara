@@ -92,7 +92,7 @@ async def transcribe_endpoint(
     onset_threshold: Optional[float] = Form(None, description="Fix a threshold instead of adaptive selection"),
     frame_threshold: Optional[float] = Form(None),
     minimum_note_length: Optional[float] = Form(
-        None, description="basic-pitch's note-length floor in ms (default 127.70); lower for fast passage-work"
+        None, description="basic-pitch's note-length floor in ms (default 40.0, tuned lower than basic-pitch's stock 127.70); lower still for fast passage-work"
     ),
 ):
     """Audio -> MusicXML. Best-effort draft, not guaranteed accurate (see module docstring)."""
@@ -126,7 +126,7 @@ async def braille_endpoint(
     onset_threshold: Optional[float] = Form(None, description="If input is audio: fix a threshold instead of adaptive selection"),
     frame_threshold: Optional[float] = Form(None),
     minimum_note_length: Optional[float] = Form(
-        None, description="If input is audio: basic-pitch's note-length floor in ms (default 127.70); lower for fast passage-work"
+        None, description="If input is audio: basic-pitch's note-length floor in ms (default 40.0, tuned lower than basic-pitch's stock 127.70); lower still for fast passage-work"
     ),
 ):
     """Score or audio -> Braille Music Code (.brl annotated text + .brf embosser-ready ASCII)."""
@@ -160,7 +160,7 @@ async def transpose_endpoint(
     onset_threshold: Optional[float] = Form(None, description="If input is audio: fix a threshold instead of adaptive selection"),
     frame_threshold: Optional[float] = Form(None),
     minimum_note_length: Optional[float] = Form(
-        None, description="If input is audio: basic-pitch's note-length floor in ms (default 127.70); lower for fast passage-work"
+        None, description="If input is audio: basic-pitch's note-length floor in ms (default 40.0, tuned lower than basic-pitch's stock 127.70); lower still for fast passage-work"
     ),
 ):
     """Score or audio + target instrument -> transposed MusicXML + range-violation report."""
@@ -202,7 +202,7 @@ async def describe_endpoint(
     onset_threshold: Optional[float] = Form(None, description="If input is audio: fix a threshold instead of adaptive selection"),
     frame_threshold: Optional[float] = Form(None),
     minimum_note_length: Optional[float] = Form(
-        None, description="If input is audio: basic-pitch's note-length floor in ms (default 127.70); lower for fast passage-work"
+        None, description="If input is audio: basic-pitch's note-length floor in ms (default 40.0, tuned lower than basic-pitch's stock 127.70); lower still for fast passage-work"
     ),
 ):
     """Score or audio -> structural text description, optionally spoken aloud."""

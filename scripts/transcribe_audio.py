@@ -95,15 +95,17 @@ def transcribe(
     None where it wasn't computed (e.g. thresholds_used when fixed thresholds
     were passed in rather than adaptively selected).
 
-    minimum_note_length (ms, default basic-pitch's stock 127.70) is its note-
-    length floor -- notes shorter than this are dropped outright. Fast
-    passage-work can fall entirely below that floor (measured: a wind quintet
-    passage with note durations as short as ~55ms had over half its notes
-    silently discarded); pass a lower value for material like that."""
+    minimum_note_length (ms, default 40.0 -- see predict_notes_adaptive's
+    docstring for the 7-track leave-one-out validation behind that default,
+    vs. basic-pitch's stock 127.70) is its note-length floor -- notes shorter
+    than this are dropped outright. Fast passage-work can fall entirely below
+    a too-high floor (measured: a wind quintet passage with note durations as
+    short as ~55ms had over half its notes silently discarded at 127.70ms);
+    pass an even lower value for material that's still losing notes."""
     out_dir.mkdir(parents=True, exist_ok=True)
 
     polyphony = thresholds_used = tempo_bpm = None
-    min_note_len_kwarg = {} if minimum_note_length is None else {"minimum_note_length": minimum_note_length}
+    min_note_len_kwarg = {"minimum_note_length": 40.0 if minimum_note_length is None else minimum_note_length}
 
     # Beat-tracking (librosa) and note transcription (basic-pitch) both read
     # audio_path but don't depend on each other's output, so run librosa's
@@ -174,9 +176,9 @@ def main():
     )
     parser.add_argument(
         "--min-note-length", type=float, default=None, metavar="MILLISECONDS",
-        help="basic-pitch's note-length floor (default 127.70ms); notes shorter than this are dropped "
-             "outright. Lower this for fast passage-work -- e.g. a wind quintet passage with notes as "
-             "short as ~55ms had over half its notes silently discarded at the default.",
+        help="basic-pitch's note-length floor in ms (default 40.0, tuned lower than basic-pitch's stock "
+             "127.70). Lower still for fast passage-work -- e.g. a wind quintet passage with notes as "
+             "short as ~55ms was still losing notes at 40ms.",
     )
     args = parser.parse_args()
 

@@ -169,8 +169,8 @@ def main():
     )
     parser.add_argument(
         "--min-note-length", type=float, default=None, metavar="MILLISECONDS",
-        help="If input is audio: basic-pitch's note-length floor (default 127.70ms); lower for fast "
-             "passage-work, whose notes can otherwise be discarded outright",
+        help="If input is audio: basic-pitch's note-length floor in ms (default 40.0, tuned lower than "
+             "basic-pitch's stock 127.70); lower still for fast passage-work",
     )
     parser.add_argument("--out", type=Path, default=None, help="Output .brl path")
     args = parser.parse_args()
