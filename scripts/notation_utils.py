@@ -1,4 +1,5 @@
 """Shared helpers for building clean, Braille-safe music21 notation."""
+import bisect
 from pathlib import Path
 
 from music21 import duration, note, pitch as m21pitch, stream, tie
@@ -6,13 +7,22 @@ from music21 import duration, note, pitch as m21pitch, stream, tie
 
 def average_polyphony(notes: list[dict]) -> float:
     """Average number of simultaneously-sounding notes at each note's onset --
-    a cheap proxy for how dense/polyphonic a passage is."""
+    a cheap proxy for how dense/polyphonic a passage is.
+
+    For each note, the count of others sounding at its onset (other.start <=
+    n.start < other.end) is (# starts <= n.start) - (# ends <= n.start), both
+    obtained by binary search over pre-sorted start/end lists -- O(n log n)
+    instead of comparing every note to every other note (O(n^2)), which matters
+    once a piece produces several thousand notes (long/dense audio, or
+    basic-pitch's characteristic over-segmentation)."""
     if not notes:
         return 0.0
-    notes = sorted(notes, key=lambda n: n["start"])
-    total = 0
-    for n in notes:
-        total += sum(1 for other in notes if other["start"] <= n["start"] < other["end"])
+    starts = sorted(n["start"] for n in notes)
+    ends = sorted(n["end"] for n in notes)
+    total = sum(
+        bisect.bisect_right(starts, n["start"]) - bisect.bisect_right(ends, n["start"])
+        for n in notes
+    )
     return total / len(notes)
 
 
@@ -27,29 +37,45 @@ def predict_notes_adaptive(audio_path: Path, dense_polyphony_threshold: float = 
     dense_polyphony_threshold=3.4 is interpolated from exactly two calibration
     points (quintet ~4.15, solo piano ~2.63) -- a real cutoff, not arbitrary,
     but only validated to bracket those two cases. Untested on other ensemble
-    sizes/genres; may need re-tuning as more material is evaluated."""
-    from basic_pitch.inference import predict
+    sizes/genres; may need re-tuning as more material is evaluated.
+
+    The probe and (if triggered) dense pass both need basic-pitch's neural net
+    output, just decoded at different thresholds -- so the net only runs once
+    here (`run_inference`), and `model_output_to_notes` (the threshold-dependent
+    decode step) is called again on the cached output rather than re-running
+    the whole `predict()` (audio load + model inference + decode) a second
+    time. Same results as calling predict() twice, just without redoing the
+    identical inference pass."""
     from basic_pitch import ICASSP_2022_MODEL_PATH
+    from basic_pitch.inference import AUDIO_SAMPLE_RATE, FFT_HOP, Model, run_inference
+    from basic_pitch.note_creation import model_output_to_notes
+
+    # Matches predict()'s default minimum_note_length=127.70ms, converted the
+    # same way, so both decodes below behave identically to two predict() calls.
+    min_note_len = round(127.70 / 1000 * (AUDIO_SAMPLE_RATE / FFT_HOP))
+
+    model = Model(ICASSP_2022_MODEL_PATH)
+    model_output = run_inference(str(audio_path), model)
+
+    def decode(onset_threshold: float, frame_threshold: float) -> list[dict]:
+        midi_data, _ = model_output_to_notes(
+            model_output, onset_thresh=onset_threshold, frame_thresh=frame_threshold, min_note_len=min_note_len,
+        )
+        return [
+            {"start": n.start, "end": n.end, "pitch": n.pitch}
+            for instrument in midi_data.instruments
+            for n in instrument.notes
+        ], midi_data
 
     stock = dict(onset_threshold=0.5, frame_threshold=0.3)
-    _, midi_data, _ = predict(str(audio_path), model_or_model_path=ICASSP_2022_MODEL_PATH, **stock)
-    probe_notes = [
-        {"start": n.start, "end": n.end, "pitch": n.pitch}
-        for instrument in midi_data.instruments
-        for n in instrument.notes
-    ]
+    probe_notes, midi_data = decode(**stock)
     polyphony = average_polyphony(probe_notes)
 
     if polyphony <= dense_polyphony_threshold:
         return probe_notes, polyphony, midi_data, stock
 
     dense = dict(onset_threshold=0.65, frame_threshold=0.25)
-    _, midi_data, _ = predict(str(audio_path), model_or_model_path=ICASSP_2022_MODEL_PATH, **dense)
-    dense_notes = [
-        {"start": n.start, "end": n.end, "pitch": n.pitch}
-        for instrument in midi_data.instruments
-        for n in instrument.notes
-    ]
+    dense_notes, midi_data = decode(**dense)
     return dense_notes, polyphony, midi_data, dense
 
 # North American Braille ASCII (NABCC) table: index i is the ASCII character

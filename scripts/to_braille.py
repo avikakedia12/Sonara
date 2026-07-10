@@ -45,9 +45,20 @@ def chunk_part(part: stream.Part, chunk_beats: float) -> list[stream.Part]:
     start = 0.0
     while start < total_beats:
         end = start + chunk_beats
-        excerpt = part.getElementsByOffset(
+        selected = part.getElementsByOffset(
             start, end, includeEndBoundary=False, mustBeginInSpan=False
-        ).stream()
+        )
+        # mustBeginInSpan=False is needed to catch elements that start before
+        # `start` but are still sounding into this window -- but music21 also
+        # counts an element that merely *touches* `start` (ends exactly there,
+        # e.g. the previous measure) as "overlapping", which would silently
+        # duplicate it into this chunk. Drop anything that doesn't actually
+        # extend past `start`.
+        excerpt = stream.Part()
+        for el in selected:
+            offset = el.getOffsetInHierarchy(part)
+            if offset + el.duration.quarterLength > start:
+                excerpt.insert(offset, el)
         excerpt = excerpt.makeMeasures(inPlace=False)
         chunks.append((start, end, excerpt))
         start = end
