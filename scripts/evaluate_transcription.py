@@ -218,8 +218,12 @@ def main():
         catastrophic += 1
         notes_log.append(f"[Tier 1] Systematic octave errors: {octave_fraction:.0%} of matches are octave-shifted")
 
-    ref_key = estimate_key([ref[i] for i, _ in pitch_matches] or ref)
-    est_key = estimate_key([est[j] for _, j in pitch_matches] or est)
+    # Estimated from the FULL ref/est note lists, not just pitch_matches --
+    # a pitch_matches pair is by definition the same pitch on both sides, so
+    # restricting to it would make ref_key and est_key always agree and the
+    # check would never fire (verified: it silently never triggered).
+    ref_key = estimate_key(ref)
+    est_key = estimate_key(est)
     key_mismatch = (ref_key.tonic.name, ref_key.mode) != (est_key.tonic.name, est_key.mode)
     if key_mismatch:
         catastrophic += 1

@@ -4,6 +4,7 @@ import pytest
 
 from evaluate_transcription import (
     cluster_by_time,
+    estimate_key,
     implied_tempo_bpm,
     load_ground_truth_notes,
     match_notes,
@@ -62,6 +63,23 @@ def test_match_notes_respects_onset_tolerance():
     assert pitch_matches == [(0, 0)]
     assert missing == []
     assert extra == []
+
+
+def test_estimate_key_differs_when_full_note_sets_differ():
+    # Regression test: the key-mismatch check in main() used to estimate key
+    # from only the pitch-matched subset of ref/est, which is by definition
+    # pitch-identical on both sides and so could never disagree. It must
+    # compare full note sets to have any chance of catching a real key error.
+    c_major_scale = [60, 62, 64, 65, 67, 69, 71, 72]
+    ref = [{"start": i * 0.5, "pitch": p} for i, p in enumerate(c_major_scale)]
+    # A "transcription" that reproduces the same scale but also hallucinates
+    # a pile of chromatic extra notes elsewhere, shifting its overall key.
+    chromatic_extras = [61, 63, 66, 68, 70, 73, 75, 78] * 2
+    est = ref + [{"start": 10 + i * 0.1, "pitch": p} for i, p in enumerate(chromatic_extras)]
+
+    ref_key = estimate_key(ref)
+    est_key = estimate_key(est)
+    assert (ref_key.tonic.name, ref_key.mode) != (est_key.tonic.name, est_key.mode)
 
 
 def test_cluster_by_time_groups_close_events():
