@@ -31,7 +31,7 @@ import librosa
 import numpy as np
 from music21 import converter, metadata as m21metadata, meter, pitch as m21pitch, stream, tempo as m21tempo
 
-from notation_utils import insert_with_ties, predict_notes_adaptive
+from notation_utils import insert_with_ties, predict_notes_adaptive, quiet_basic_pitch
 
 
 def estimate_beat_times(audio_path: Path) -> tuple[float, np.ndarray]:
@@ -121,13 +121,15 @@ def transcribe(
             from basic_pitch.inference import predict
             from basic_pitch import ICASSP_2022_MODEL_PATH
 
-            _, midi_data, _ = predict(
-                str(audio_path),
-                model_or_model_path=ICASSP_2022_MODEL_PATH,
-                onset_threshold=onset_threshold if onset_threshold is not None else 0.5,
-                frame_threshold=frame_threshold if frame_threshold is not None else 0.3,
-                **min_note_len_kwarg,
-            )
+            print(f"Transcribing {audio_path.name}...")
+            with quiet_basic_pitch():
+                _, midi_data, _ = predict(
+                    str(audio_path),
+                    model_or_model_path=ICASSP_2022_MODEL_PATH,
+                    onset_threshold=onset_threshold if onset_threshold is not None else 0.5,
+                    frame_threshold=frame_threshold if frame_threshold is not None else 0.3,
+                    **min_note_len_kwarg,
+                )
 
         if quantize:
             tempo_bpm, beat_times = beat_future.result()

@@ -64,6 +64,8 @@ import mir_eval
 import numpy as np
 from music21 import key, note as m21note, pitch as m21pitch, stream
 
+from notation_utils import quiet_basic_pitch
+
 
 def load_ground_truth_notes(csv_path: Path, max_seconds: float | None) -> list[dict]:
     notes = []
@@ -81,7 +83,8 @@ def get_estimate_notes(audio_path: Path, **predict_kwargs) -> list[dict]:
     from basic_pitch.inference import predict
     from basic_pitch import ICASSP_2022_MODEL_PATH
 
-    _, midi_data, _ = predict(str(audio_path), model_or_model_path=ICASSP_2022_MODEL_PATH, **predict_kwargs)
+    with quiet_basic_pitch():
+        _, midi_data, _ = predict(str(audio_path), model_or_model_path=ICASSP_2022_MODEL_PATH, **predict_kwargs)
     notes = []
     for instrument in midi_data.instruments:
         for n in instrument.notes:

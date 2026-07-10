@@ -1,8 +1,23 @@
 """Shared helpers for building clean, Braille-safe music21 notation."""
 import bisect
+import contextlib
+import io
 from pathlib import Path
 
 from music21 import duration, note, pitch as m21pitch, stream, tie
+
+
+@contextlib.contextmanager
+def quiet_basic_pitch():
+    """basic-pitch's CoreML prediction path (basic_pitch.inference.Model.predict)
+    unconditionally prints isfinite/shape/dtype debug lines on every inference
+    window -- hundreds of lines of noise for a real recording, since it fires
+    once per sliding window, not once per call. That's in the installed
+    third-party package, not our code, so it can't be edited directly (and
+    wouldn't survive a basic-pitch upgrade if it were monkeypatched); silencing
+    stdout for the duration of the call is the least invasive fix available."""
+    with contextlib.redirect_stdout(io.StringIO()):
+        yield
 
 
 def average_polyphony(notes: list[dict]) -> float:
@@ -71,7 +86,9 @@ def predict_notes_adaptive(
     min_note_len = round(minimum_note_length / 1000 * (AUDIO_SAMPLE_RATE / FFT_HOP))
 
     model = Model(ICASSP_2022_MODEL_PATH)
-    model_output = run_inference(str(audio_path), model)
+    print(f"Transcribing {audio_path.name}...")
+    with quiet_basic_pitch():
+        model_output = run_inference(str(audio_path), model)
 
     def decode(onset_threshold: float, frame_threshold: float) -> list[dict]:
         midi_data, _ = model_output_to_notes(
