@@ -26,7 +26,9 @@ def average_polyphony(notes: list[dict]) -> float:
     return total / len(notes)
 
 
-def predict_notes_adaptive(audio_path: Path, dense_polyphony_threshold: float = 3.4) -> tuple[list[dict], float, float, dict]:
+def predict_notes_adaptive(
+    audio_path: Path, dense_polyphony_threshold: float = 3.4, minimum_note_length: float = 127.70
+) -> tuple[list[dict], float, float, dict]:
     """Probe with basic-pitch's stock thresholds, estimate polyphony density from
     the result, and only re-run with higher (stricter) thresholds if the material
     looks dense/multi-voiced -- tuned thresholds measurably help on dense chamber
@@ -39,6 +41,16 @@ def predict_notes_adaptive(audio_path: Path, dense_polyphony_threshold: float = 
     but only validated to bracket those two cases. Untested on other ensemble
     sizes/genres; may need re-tuning as more material is evaluated.
 
+    minimum_note_length (ms) is basic-pitch's own note-length floor -- notes
+    shorter than this are dropped outright, regardless of detection confidence.
+    The 127.70ms default (basic-pitch's stock value) silently guts fast
+    passage-work: measured on a wind quintet passage with note durations as
+    short as ~55ms, dropping to 40ms raised F-measure 0.302->0.367 by recovering
+    genuine short notes the default floor was discarding. Left at the stock
+    default here since -- unlike dense_polyphony_threshold -- there's no
+    adaptive signal wired up yet to auto-detect fast material; callers who know
+    their material is fast passage-work should pass a lower value explicitly.
+
     The probe and (if triggered) dense pass both need basic-pitch's neural net
     output, just decoded at different thresholds -- so the net only runs once
     here (`run_inference`), and `model_output_to_notes` (the threshold-dependent
@@ -50,9 +62,9 @@ def predict_notes_adaptive(audio_path: Path, dense_polyphony_threshold: float = 
     from basic_pitch.inference import AUDIO_SAMPLE_RATE, FFT_HOP, Model, run_inference
     from basic_pitch.note_creation import model_output_to_notes
 
-    # Matches predict()'s default minimum_note_length=127.70ms, converted the
-    # same way, so both decodes below behave identically to two predict() calls.
-    min_note_len = round(127.70 / 1000 * (AUDIO_SAMPLE_RATE / FFT_HOP))
+    # Matches predict()'s minimum_note_length handling, converted the same way,
+    # so both decodes below behave identically to two predict() calls.
+    min_note_len = round(minimum_note_length / 1000 * (AUDIO_SAMPLE_RATE / FFT_HOP))
 
     model = Model(ICASSP_2022_MODEL_PATH)
     model_output = run_inference(str(audio_path), model)

@@ -11,7 +11,10 @@ def _fake_transcribe_factory():
     """Builds a fake transcribe() with the same signature/return shape as the
     real transcribe_audio.transcribe, so audio-input endpoint branches can be
     tested without running actual basic-pitch inference."""
-    def fake_transcribe(audio_path, out_dir, title=None, quantize=None, onset_threshold=None, frame_threshold=None):
+    def fake_transcribe(
+        audio_path, out_dir, title=None, quantize=None, onset_threshold=None, frame_threshold=None,
+        minimum_note_length=None,
+    ):
         out_dir.mkdir(parents=True, exist_ok=True)
         part = stream.Part()
         part.insert(0, meter.TimeSignature("4/4"))

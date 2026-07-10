@@ -51,6 +51,7 @@ def _maybe_transcribe(
     transcribe_quantize: Optional[int] = None,
     onset_threshold: Optional[float] = None,
     frame_threshold: Optional[float] = None,
+    minimum_note_length: Optional[float] = None,
 ) -> tuple[Path, Optional[str]]:
     """If upload_path is audio, transcribe it to MusicXML first and return
     (musicxml_path, accuracy_note); otherwise return (upload_path, None)
@@ -59,7 +60,10 @@ def _maybe_transcribe(
     if upload_path.suffix.lower() not in AUDIO_EXTENSIONS:
         return upload_path, None
     try:
-        result = transcribe(upload_path, upload_path.parent / "out", None, transcribe_quantize, onset_threshold, frame_threshold)
+        result = transcribe(
+            upload_path, upload_path.parent / "out", None, transcribe_quantize,
+            onset_threshold, frame_threshold, minimum_note_length,
+        )
     except Exception as exc:  # noqa: BLE001 - surface as a client-facing error
         raise HTTPException(status_code=422, detail=f"Transcription failed: {exc}")
     accuracy_note = (
@@ -87,12 +91,15 @@ async def transcribe_endpoint(
     title: Optional[str] = Form(None),
     onset_threshold: Optional[float] = Form(None, description="Fix a threshold instead of adaptive selection"),
     frame_threshold: Optional[float] = Form(None),
+    minimum_note_length: Optional[float] = Form(
+        None, description="basic-pitch's note-length floor in ms (default 127.70); lower for fast passage-work"
+    ),
 ):
     """Audio -> MusicXML. Best-effort draft, not guaranteed accurate (see module docstring)."""
     audio_path = _save_upload(audio, ".wav")
     out_dir = audio_path.parent / "out"
     try:
-        result = transcribe(audio_path, out_dir, title, quantize, onset_threshold, frame_threshold)
+        result = transcribe(audio_path, out_dir, title, quantize, onset_threshold, frame_threshold, minimum_note_length)
     except Exception as exc:  # noqa: BLE001 - surface as a client-facing error
         raise HTTPException(status_code=422, detail=f"Transcription failed: {exc}")
 
@@ -118,10 +125,15 @@ async def braille_endpoint(
     transcribe_quantize: Optional[int] = Form(None, description="If input is audio: beat-grid subdivisions, e.g. 4 (ignored for symbolic input)"),
     onset_threshold: Optional[float] = Form(None, description="If input is audio: fix a threshold instead of adaptive selection"),
     frame_threshold: Optional[float] = Form(None),
+    minimum_note_length: Optional[float] = Form(
+        None, description="If input is audio: basic-pitch's note-length floor in ms (default 127.70); lower for fast passage-work"
+    ),
 ):
     """Score or audio -> Braille Music Code (.brl annotated text + .brf embosser-ready ASCII)."""
     upload_path = _save_upload(score, ".musicxml")
-    score_path, accuracy_note = _maybe_transcribe(upload_path, transcribe_quantize, onset_threshold, frame_threshold)
+    score_path, accuracy_note = _maybe_transcribe(
+        upload_path, transcribe_quantize, onset_threshold, frame_threshold, minimum_note_length
+    )
     try:
         result = transcribe_to_braille(score_path, part_index, melody_only, quantize, chunk_beats)
     except ValueError as exc:
@@ -147,6 +159,9 @@ async def transpose_endpoint(
     quantize: Optional[int] = Form(None, description="If input is audio: beat-grid subdivisions, e.g. 4 (ignored for symbolic input)"),
     onset_threshold: Optional[float] = Form(None, description="If input is audio: fix a threshold instead of adaptive selection"),
     frame_threshold: Optional[float] = Form(None),
+    minimum_note_length: Optional[float] = Form(
+        None, description="If input is audio: basic-pitch's note-length floor in ms (default 127.70); lower for fast passage-work"
+    ),
 ):
     """Score or audio + target instrument -> transposed MusicXML + range-violation report."""
     if target_instrument not in INSTRUMENT_REGISTRY:
@@ -155,7 +170,7 @@ async def transpose_endpoint(
             detail=f"Unknown instrument '{target_instrument}'. Choices: {sorted(INSTRUMENT_REGISTRY)}",
         )
     upload_path = _save_upload(score, ".musicxml")
-    score_path, accuracy_note = _maybe_transcribe(upload_path, quantize, onset_threshold, frame_threshold)
+    score_path, accuracy_note = _maybe_transcribe(upload_path, quantize, onset_threshold, frame_threshold, minimum_note_length)
 
     part = _load_part(score_path, part_index)
 
@@ -186,13 +201,18 @@ async def describe_endpoint(
     transcribe_quantize: Optional[int] = Form(None, description="If input is audio: beat-grid subdivisions, e.g. 4 (ignored for symbolic input)"),
     onset_threshold: Optional[float] = Form(None, description="If input is audio: fix a threshold instead of adaptive selection"),
     frame_threshold: Optional[float] = Form(None),
+    minimum_note_length: Optional[float] = Form(
+        None, description="If input is audio: basic-pitch's note-length floor in ms (default 127.70); lower for fast passage-work"
+    ),
 ):
     """Score or audio -> structural text description, optionally spoken aloud."""
     if level not in ("brief", "standard", "detailed"):
         raise HTTPException(status_code=422, detail="level must be one of: brief, standard, detailed")
 
     upload_path = _save_upload(score, ".musicxml")
-    score_path, accuracy_note = _maybe_transcribe(upload_path, transcribe_quantize, onset_threshold, frame_threshold)
+    score_path, accuracy_note = _maybe_transcribe(
+        upload_path, transcribe_quantize, onset_threshold, frame_threshold, minimum_note_length
+    )
 
     parsed = converter.parse(str(score_path))
     if not isinstance(parsed, stream.Score):

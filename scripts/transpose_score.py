@@ -99,11 +99,17 @@ def main():
         "--frame-threshold", type=float, default=None,
         help="If input is audio: fix a basic-pitch frame threshold instead of auto-selecting",
     )
+    parser.add_argument(
+        "--min-note-length", type=float, default=None, metavar="MILLISECONDS",
+        help="If input is audio: basic-pitch's note-length floor (default 127.70ms); lower for fast "
+             "passage-work, whose notes can otherwise be discarded outright",
+    )
     args = parser.parse_args()
 
     score_path = resolve_score_path(
         args.input, quantize=args.quantize,
         onset_threshold=args.onset_threshold, frame_threshold=args.frame_threshold,
+        minimum_note_length=args.min_note_length,
     )
     if score_path != args.input:
         print(f"Transcribed {args.input} -> {score_path}")

@@ -88,14 +88,22 @@ def transcribe(
     quantize: int | None = None,
     onset_threshold: float | None = None,
     frame_threshold: float | None = None,
+    minimum_note_length: float | None = None,
 ) -> dict:
     """Returns a dict: {"path": Path to written MusicXML, "polyphony": float | None,
     "thresholds_used": dict | None, "tempo_bpm": float | None} -- metadata is
     None where it wasn't computed (e.g. thresholds_used when fixed thresholds
-    were passed in rather than adaptively selected)."""
+    were passed in rather than adaptively selected).
+
+    minimum_note_length (ms, default basic-pitch's stock 127.70) is its note-
+    length floor -- notes shorter than this are dropped outright. Fast
+    passage-work can fall entirely below that floor (measured: a wind quintet
+    passage with note durations as short as ~55ms had over half its notes
+    silently discarded); pass a lower value for material like that."""
     out_dir.mkdir(parents=True, exist_ok=True)
 
     polyphony = thresholds_used = tempo_bpm = None
+    min_note_len_kwarg = {} if minimum_note_length is None else {"minimum_note_length": minimum_note_length}
 
     # Beat-tracking (librosa) and note transcription (basic-pitch) both read
     # audio_path but don't depend on each other's output, so run librosa's
@@ -105,7 +113,7 @@ def transcribe(
         beat_future = executor.submit(estimate_beat_times, audio_path) if quantize else None
 
         if onset_threshold is None and frame_threshold is None:
-            _, polyphony, midi_data, thresholds_used = predict_notes_adaptive(audio_path)
+            _, polyphony, midi_data, thresholds_used = predict_notes_adaptive(audio_path, **min_note_len_kwarg)
             print(f"Estimated polyphony: {polyphony:.2f} simultaneous notes/onset -> thresholds {thresholds_used}")
         else:
             from basic_pitch.inference import predict
@@ -116,6 +124,7 @@ def transcribe(
                 model_or_model_path=ICASSP_2022_MODEL_PATH,
                 onset_threshold=onset_threshold if onset_threshold is not None else 0.5,
                 frame_threshold=frame_threshold if frame_threshold is not None else 0.3,
+                **min_note_len_kwarg,
             )
 
         if quantize:
@@ -163,10 +172,17 @@ def main():
         "--frame-threshold", type=float, default=None,
         help="Fix a specific basic-pitch frame threshold instead of auto-selecting from estimated polyphony",
     )
+    parser.add_argument(
+        "--min-note-length", type=float, default=None, metavar="MILLISECONDS",
+        help="basic-pitch's note-length floor (default 127.70ms); notes shorter than this are dropped "
+             "outright. Lower this for fast passage-work -- e.g. a wind quintet passage with notes as "
+             "short as ~55ms had over half its notes silently discarded at the default.",
+    )
     args = parser.parse_args()
 
     result = transcribe(
-        args.audio, args.out_dir, args.title, args.quantize, args.onset_threshold, args.frame_threshold
+        args.audio, args.out_dir, args.title, args.quantize, args.onset_threshold, args.frame_threshold,
+        args.min_note_length,
     )
     print(f"Wrote {result['path']}")
 

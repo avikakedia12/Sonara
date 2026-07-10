@@ -16,6 +16,7 @@ def resolve_score_path(
     quantize: int | None = None,
     onset_threshold: float | None = None,
     frame_threshold: float | None = None,
+    minimum_note_length: float | None = None,
 ) -> Path:
     """If input_path is audio, transcribe it to MusicXML first and return that
     path; otherwise return input_path unchanged. Keeps the audio->score step
@@ -28,5 +29,6 @@ def resolve_score_path(
         quantize=quantize,
         onset_threshold=onset_threshold,
         frame_threshold=frame_threshold,
+        minimum_note_length=minimum_note_length,
     )
     return result["path"]

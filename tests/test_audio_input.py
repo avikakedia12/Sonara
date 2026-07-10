@@ -22,8 +22,11 @@ def test_audio_extensions_are_recognized():
 def test_audio_extension_triggers_transcription(tmp_path, monkeypatch):
     calls = {}
 
-    def fake_transcribe(audio_path, out_dir, title=None, quantize=None, onset_threshold=None, frame_threshold=None):
-        calls["args"] = (audio_path, out_dir, title, quantize, onset_threshold, frame_threshold)
+    def fake_transcribe(
+        audio_path, out_dir, title=None, quantize=None, onset_threshold=None, frame_threshold=None,
+        minimum_note_length=None,
+    ):
+        calls["args"] = (audio_path, out_dir, title, quantize, onset_threshold, frame_threshold, minimum_note_length)
         out_dir.mkdir(parents=True, exist_ok=True)
         result_path = out_dir / "transcribed.musicxml"
         result_path.touch()
@@ -37,7 +40,7 @@ def test_audio_extension_triggers_transcription(tmp_path, monkeypatch):
     result = audio_input.resolve_score_path(audio_path, quantize=4, onset_threshold=0.6, frame_threshold=0.2)
 
     assert result == tmp_path / "transcribed.musicxml"
-    assert calls["args"] == (audio_path, tmp_path, None, 4, 0.6, 0.2)
+    assert calls["args"] == (audio_path, tmp_path, None, 4, 0.6, 0.2, None)
 
 
 def test_out_dir_defaults_to_input_parent(tmp_path, monkeypatch):
