@@ -1,0 +1,7 @@
+[tool.pytest.ini_options]
+pythonpath = ["scripts"]
+testpaths = ["tests"]
+markers = [
+    "slow: exercises real basic-pitch audio transcription (several seconds each, downloads/loads a model); skipped by default, run with `pytest -m slow`",
+]
+addopts = "-m 'not slow'"

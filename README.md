@@ -169,6 +169,15 @@ pip install librosa numpy music21 basic-pitch mir_eval fastapi uvicorn python-mu
 pip install pyttsx3
 ```
 
+## Tests
+
+```bash
+pip install pytest httpx  # httpx is needed by FastAPI's TestClient
+pytest
+```
+
+Covers the deterministic logic across all four scripts (transpose range-checking, Braille chunking, Describe's text generation, the MusicNet CSV/W-score plumbing) and every API endpoint's request/response contract, using synthetic scores and a faked `transcribe()` so the suite runs in ~2 seconds without invoking real basic-pitch inference. A separate `pytest -m slow` runs three additional true end-to-end tests against real audio transcription (`data/sample/1727_clip30.wav`, several seconds each, skipped by default) — these are the ones that would catch an actual regression in the transcription pipeline itself rather than just its call site. Tests that need `data/sample/` are skipped automatically if that gitignored directory isn't populated locally.
+
 ## Layout
 
 ```
@@ -179,4 +188,4 @@ archive/     raw MusicNet download (audio, labels, MIDI, metadata) used to regen
 
 ## Status
 
-Early-stage. Transcribe → Braille → Transpose → Describe all work end-to-end on sample audio, with an evaluation harness against real ground truth for transcription accuracy. No automated test suite yet — verified via manual smoke tests of each script/endpoint.
+Early-stage. Transcribe → Braille → Transpose → Describe all work end-to-end on sample audio, with an evaluation harness against real ground truth for transcription accuracy, and an automated `pytest` suite (85 fast tests + 3 slow real-audio integration tests) covering all four scripts and the API.
