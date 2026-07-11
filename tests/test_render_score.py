@@ -1,9 +1,6 @@
-import platform
-
-import pytest
 from music21 import meter, note, stream
 
-from render_score import render_to_png_pages, render_to_svg_pages
+from render_score import render_to_svg_pages
 
 
 def _simple_musicxml(tmp_path):
@@ -26,16 +23,6 @@ def test_render_to_svg_pages_produces_svg(tmp_path):
 
     assert len(pages) == 1
     assert pages[0].strip().startswith("<?xml") or "<svg" in pages[0]
-
-
-@pytest.mark.skipif(platform.system() != "Darwin", reason="render_to_png_pages uses macOS's qlmanage")
-def test_render_to_png_pages_produces_valid_png(tmp_path):
-    xml_path = _simple_musicxml(tmp_path)
-
-    pages = render_to_png_pages(xml_path)
-
-    assert len(pages) == 1
-    assert pages[0][:8] == b"\x89PNG\r\n\x1a\n"  # PNG magic bytes
 
 
 def test_render_to_svg_pages_raises_on_invalid_file(tmp_path):

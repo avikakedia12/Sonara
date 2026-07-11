@@ -33,7 +33,7 @@ import numpy as np
 from music21 import converter, metadata as m21metadata, meter, pitch as m21pitch, stream, tempo as m21tempo
 
 from notation_utils import insert_with_ties, predict_notes_adaptive, quiet_basic_pitch
-from render_score import render_to_png_pages, render_to_svg_pages
+from render_score import render_to_svg_pages
 
 
 def estimate_beat_times(audio_path: Path) -> tuple[float, np.ndarray]:
@@ -155,21 +155,6 @@ def transcribe(
         svg_path.write_text(svg, encoding="utf-8")
         svg_paths.append(svg_path)
 
-    # PNG rendering shells out to macOS's qlmanage (see render_score.py) --
-    # best-effort, since it's a viewing convenience on top of the SVG output
-    # above, not something that should fail the whole transcription if it's
-    # ever run on a non-macOS host without qlmanage available.
-    try:
-        png_pages = render_to_png_pages(musicxml_path)
-    except (FileNotFoundError, subprocess.CalledProcessError) as exc:
-        print(f"PNG rendering unavailable ({exc}); .svg output is still written above.")
-        png_pages = []
-    png_paths = []
-    for i, png_bytes in enumerate(png_pages, start=1):
-        png_path = out_dir / f"{audio_path.stem}_page{i}.png"
-        png_path.write_bytes(png_bytes)
-        png_paths.append(png_path)
-
     return {
         "path": musicxml_path,
         "polyphony": polyphony,
@@ -177,7 +162,6 @@ def transcribe(
         "tempo_bpm": tempo_bpm,
         "sheet_music_svg": svg_pages,
         "sheet_music_svg_paths": svg_paths,
-        "sheet_music_png_paths": png_paths,
     }
 
 
@@ -221,13 +205,11 @@ def main():
     )
     print(f"Wrote {result['path']}")
     print(f"Wrote {len(result['sheet_music_svg_paths'])} page(s) of sheet music (.svg): {result['sheet_music_svg_paths']}")
-    if result["sheet_music_png_paths"]:
-        print(f"Wrote {len(result['sheet_music_png_paths'])} page(s) of sheet music (.png): {result['sheet_music_png_paths']}")
-        if not args.no_show:
-            try:
-                subprocess.run(["open", str(result["sheet_music_png_paths"][0])], check=True)
-            except (FileNotFoundError, subprocess.CalledProcessError) as exc:
-                print(f"(couldn't auto-open the sheet music image: {exc})")
+    if not args.no_show:
+        try:
+            subprocess.run(["open", str(result["sheet_music_svg_paths"][0])], check=True)
+        except (FileNotFoundError, subprocess.CalledProcessError) as exc:
+            print(f"(couldn't auto-open the sheet music image: {exc})")
     if not args.quantize:
         print(
             "Note: unquantized transcription can render as dense, hard-to-read notation "
