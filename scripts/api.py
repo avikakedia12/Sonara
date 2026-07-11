@@ -167,6 +167,7 @@ def transpose_endpoint(
     ),
 ):
     """Score or audio + target instrument -> transposed MusicXML + range-violation report."""
+    target_instrument = target_instrument.lower()
     if target_instrument not in INSTRUMENT_REGISTRY:
         raise HTTPException(
             status_code=422,
@@ -198,7 +199,7 @@ def transpose_endpoint(
 
 
 @app.post("/describe")
-def describe_endpoint(
+async def describe_endpoint(
     score: UploadFile = File(..., description="MusicXML/MIDI/etc. score, OR a raw audio file (wav/mp3/etc.) to transcribe first"),
     level: str = Form("standard", description="brief | standard | detailed"),
     speak: bool = Form(False, description="Also render the description to speech audio (base64 AIFF in the response)"),
@@ -209,7 +210,17 @@ def describe_endpoint(
         None, description="If input is audio: basic-pitch's note-length floor in ms (default 40.0, tuned lower than basic-pitch's stock 127.70); lower still for fast passage-work"
     ),
 ):
-    """Score or audio -> structural text description, optionally spoken aloud."""
+    """Score or audio -> structural text description, optionally spoken aloud.
+
+    Unlike the other three endpoints, this one is async def (runs on the main
+    thread) rather than plain def (runs in Starlette's worker thread pool):
+    speak_description()'s pyttsx3 backend uses macOS's NSSpeechSynthesizer,
+    which silently produces a corrupt, zero-duration audio file -- no
+    exception, no error, just broken output -- when driven from any thread
+    other than the process's true main thread. describe's non-speech work is
+    lightweight text generation, so blocking the event loop briefly here is a
+    much better tradeoff than every speak=true request returning broken audio.
+    """
     if level not in ("brief", "standard", "detailed"):
         raise HTTPException(status_code=422, detail="level must be one of: brief, standard, detailed")
 
