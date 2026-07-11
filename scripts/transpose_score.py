@@ -68,7 +68,12 @@ def transpose_for_instrument(part: stream.Part, target_name: str) -> tuple[strea
         for p in pitches:
             if p.ps < low.ps or p.ps > high.ps:
                 out_of_range.append({
-                    "offset": n.getOffsetInHierarchy(written),
+                    # float(), not the raw Fraction getOffsetInHierarchy returns
+                    # for triplet/irregular rhythms (common in unquantized audio
+                    # transcription) -- a Fraction prints fine via the CLI's
+                    # f"{v['offset']:.2f}" but isn't JSON-serializable, which
+                    # otherwise 500s the API's /transpose endpoint outright.
+                    "offset": float(n.getOffsetInHierarchy(written)),
                     "pitch": p.nameWithOctave,
                     "direction": "below" if p.ps < low.ps else "above",
                 })

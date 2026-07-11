@@ -72,3 +72,20 @@ def test_chord_notes_are_individually_range_checked():
     _, out_of_range = transpose_for_instrument(part, "clarinet")
     assert len(out_of_range) == 1
     assert out_of_range[0]["pitch"] == "D2"
+
+
+def test_out_of_range_offset_is_json_serializable_for_triplet_notes():
+    # Regression test: a note at a triplet (non-power-of-2) offset makes
+    # getOffsetInHierarchy return a fractions.Fraction, which used to be
+    # returned as-is -- fine for the CLI's f"{offset:.2f}", but not
+    # JSON-serializable, which 500'd the API's /transpose endpoint outright
+    # for any unquantized (fractional-rhythm) audio transcription.
+    import json
+
+    part = stream.Part()
+    part.append(note.Note("C2", quarterLength=1 / 3))  # triplet eighth
+    _, out_of_range = transpose_for_instrument(part, "clarinet")
+
+    assert len(out_of_range) == 1
+    assert isinstance(out_of_range[0]["offset"], float)
+    json.dumps(out_of_range)  # must not raise
