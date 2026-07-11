@@ -85,7 +85,7 @@ def _load_part(score_path: Path, part_index: int) -> stream.Part:
 
 
 @app.post("/transcribe")
-async def transcribe_endpoint(
+def transcribe_endpoint(
     audio: UploadFile = File(..., description="Audio file (wav/mp3/etc.)"),
     quantize: Optional[int] = Form(None, description="Beat-grid subdivisions, e.g. 4 = 16th notes; omit for raw timing"),
     title: Optional[str] = Form(None),
@@ -116,7 +116,7 @@ async def transcribe_endpoint(
 
 
 @app.post("/braille")
-async def braille_endpoint(
+def braille_endpoint(
     score: UploadFile = File(..., description="MusicXML/MIDI/etc. score, OR a raw audio file (wav/mp3/etc.) to transcribe first"),
     part_index: int = Form(0),
     melody_only: bool = Form(False, description="Collapse to a single top-note line (for dense/noisy input)"),
@@ -152,7 +152,7 @@ async def braille_endpoint(
 
 
 @app.post("/transpose")
-async def transpose_endpoint(
+def transpose_endpoint(
     score: UploadFile = File(..., description="MusicXML/MIDI/etc. score, OR a raw audio file (wav/mp3/etc.) to transcribe first"),
     target_instrument: str = Form(..., description=f"One of: {sorted(INSTRUMENT_REGISTRY)}"),
     part_index: int = Form(0),
@@ -194,7 +194,7 @@ async def transpose_endpoint(
 
 
 @app.post("/describe")
-async def describe_endpoint(
+def describe_endpoint(
     score: UploadFile = File(..., description="MusicXML/MIDI/etc. score, OR a raw audio file (wav/mp3/etc.) to transcribe first"),
     level: str = Form("standard", description="brief | standard | detailed"),
     speak: bool = Form(False, description="Also render the description to speech audio (base64 AIFF in the response)"),
