@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import HTMLResponse
 from music21 import converter, stream
 
 from audio_input import AUDIO_EXTENSIONS
@@ -247,4 +248,66 @@ async def root():
         "name": "Sonara",
         "endpoints": ["/transcribe", "/braille", "/transpose", "/describe"],
         "docs": "/docs",
+        "view": "/view",
     }
+
+
+@app.get("/view", response_class=HTMLResponse)
+async def view():
+    """A minimal upload form that calls /transcribe and renders the returned
+    sheet_music_svg directly in the page -- unlike /docs (Swagger UI), which
+    can only show a JSON response as text, this actually displays the
+    notation, since the browser is given real HTML/SVG to render, not a JSON
+    string to read. No framework/build step -- one static page, inline JS."""
+    return """<!DOCTYPE html>
+<html>
+<head>
+<title>Sonara</title>
+<style>
+body { font-family: sans-serif; max-width: 900px; margin: 2em auto; padding: 0 1em; }
+#status { margin: 1em 0; color: #555; }
+#sheetMusic svg { max-width: 100%; height: auto; display: block; margin-bottom: 1em; }
+</style>
+</head>
+<body>
+<h1>Sonara: Transcribe &amp; View</h1>
+<p>Upload an audio file to transcribe it and see the actual rendered sheet music below.</p>
+<input type="file" id="audioFile" accept="audio/*">
+<button id="submitBtn">Transcribe</button>
+<div id="status"></div>
+<div id="sheetMusic"></div>
+<script>
+document.getElementById('submitBtn').onclick = async () => {
+    const fileInput = document.getElementById('audioFile');
+    const status = document.getElementById('status');
+    const sheetDiv = document.getElementById('sheetMusic');
+    sheetDiv.innerHTML = '';
+    if (!fileInput.files.length) {
+        status.textContent = 'Choose an audio file first.';
+        return;
+    }
+    status.textContent = 'Transcribing... this can take up to a minute or more for longer files.';
+    const formData = new FormData();
+    formData.append('audio', fileInput.files[0]);
+    try {
+        const resp = await fetch('/transcribe', { method: 'POST', body: formData });
+        const data = await resp.json();
+        if (!resp.ok) {
+            status.textContent = 'Error: ' + (data.detail || resp.status);
+            return;
+        }
+        status.textContent = `Done. Polyphony ${data.polyphony?.toFixed(2)}, ` +
+            `tempo ${data.tempo_bpm?.toFixed(1)} BPM, ${data.sheet_music_svg.length} page(s). ` +
+            data.accuracy_note;
+        for (const svg of data.sheet_music_svg) {
+            const page = document.createElement('div');
+            page.innerHTML = svg;
+            sheetDiv.appendChild(page);
+        }
+    } catch (e) {
+        status.textContent = 'Request failed: ' + e;
+    }
+};
+</script>
+</body>
+</html>"""
