@@ -26,6 +26,7 @@ from music21 import converter, stream
 
 from audio_input import AUDIO_EXTENSIONS
 from describe_score import build_description, speak_description
+from render_score import render_to_svg_pages
 from to_braille import transcribe_to_braille
 from transcribe_audio import transcribe
 from transpose_score import INSTRUMENT_REGISTRY, transpose_for_instrument
@@ -108,6 +109,7 @@ def transcribe_endpoint(
         "polyphony": result["polyphony"],
         "thresholds_used": result["thresholds_used"],
         "tempo_bpm": result["tempo_bpm"],
+        "sheet_music_svg": result["sheet_music_svg"],
         "accuracy_note": (
             "Best-effort audio transcription, not guaranteed accurate. "
             "For guaranteed-accurate output, provide a symbolic score to /braille or /transpose instead."
@@ -187,6 +189,7 @@ def transpose_endpoint(
         "target_instrument": target_instrument,
         "playable_range": {"low": low, "high": high},
         "out_of_range_notes": out_of_range,
+        "sheet_music_svg": render_to_svg_pages(out_path),
     }
     if accuracy_note:
         response["accuracy_note"] = accuracy_note

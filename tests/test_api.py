@@ -29,6 +29,8 @@ def _fake_transcribe_factory():
             "polyphony": 1.0,
             "thresholds_used": {"onset_threshold": 0.5, "frame_threshold": 0.3},
             "tempo_bpm": 120.0,
+            "sheet_music_svg": ["<svg>fake</svg>"],
+            "sheet_music_svg_paths": [],
         }
     return fake_transcribe
 

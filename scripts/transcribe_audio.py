@@ -32,6 +32,7 @@ import numpy as np
 from music21 import converter, metadata as m21metadata, meter, pitch as m21pitch, stream, tempo as m21tempo
 
 from notation_utils import insert_with_ties, predict_notes_adaptive, quiet_basic_pitch
+from render_score import render_to_svg_pages
 
 
 def estimate_beat_times(audio_path: Path) -> tuple[float, np.ndarray]:
@@ -146,11 +147,20 @@ def transcribe(
     musicxml_path = out_dir / f"{audio_path.stem}.musicxml"
     score.write("musicxml", fp=str(musicxml_path))
 
+    svg_pages = render_to_svg_pages(musicxml_path)
+    svg_paths = []
+    for i, svg in enumerate(svg_pages, start=1):
+        svg_path = out_dir / f"{audio_path.stem}_page{i}.svg"
+        svg_path.write_text(svg, encoding="utf-8")
+        svg_paths.append(svg_path)
+
     return {
         "path": musicxml_path,
         "polyphony": polyphony,
         "thresholds_used": thresholds_used,
         "tempo_bpm": tempo_bpm,
+        "sheet_music_svg": svg_pages,
+        "sheet_music_svg_paths": svg_paths,
     }
 
 
@@ -189,6 +199,12 @@ def main():
         args.min_note_length,
     )
     print(f"Wrote {result['path']}")
+    print(f"Wrote {len(result['sheet_music_svg_paths'])} page(s) of sheet music: {result['sheet_music_svg_paths']}")
+    if not args.quantize:
+        print(
+            "Note: unquantized transcription can render as dense, hard-to-read notation "
+            "(irregular tuplets/ties) -- pass --quantize for cleaner sheet music."
+        )
 
 
 if __name__ == "__main__":
