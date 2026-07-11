@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from music21 import converter, stream
 
@@ -36,6 +37,17 @@ app = FastAPI(
     title="Sonara",
     description="Audio-to-Braille music accessibility pipeline",
     version="0.1.0",
+)
+
+# Local-dev-only: lets the Vite frontend (localhost:5173 by default) call this
+# API (localhost:8000) despite being a different origin. Both sides only ever
+# run on localhost in this project, so a permissive localhost/127.0.0.1
+# allowlist is fine here -- this isn't a public deployment.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
