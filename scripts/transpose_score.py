@@ -52,7 +52,7 @@ INSTRUMENT_REGISTRY = {
 
 
 def transpose_for_instrument(part: stream.Part, target_name: str) -> tuple[stream.Part, list[dict]]:
-    cls, low_str, high_str = INSTRUMENT_REGISTRY[target_name]
+    cls, low_str, high_str = INSTRUMENT_REGISTRY[target_name.lower()]
     low, high = m21pitch.Pitch(low_str), m21pitch.Pitch(high_str)
 
     sounding = part.toSoundingPitch()
@@ -87,8 +87,8 @@ def main():
         help="Path to a MusicXML/MIDI/etc. score, or an audio file (wav/mp3/etc.) to transcribe first",
     )
     parser.add_argument(
-        "--target-instrument", required=True, choices=sorted(INSTRUMENT_REGISTRY.keys()),
-        help="Instrument to transpose for",
+        "--target-instrument", required=True, type=str.lower, choices=sorted(INSTRUMENT_REGISTRY.keys()),
+        help="Instrument to transpose for (case-insensitive)",
     )
     parser.add_argument("--part-index", type=int, default=0, help="Which part to transpose")
     parser.add_argument("--out", type=Path, default=None, help="Output MusicXML path")

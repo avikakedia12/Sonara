@@ -27,6 +27,18 @@ def test_bflat_clarinet_transposes_up_a_major_second():
     assert out_of_range == []
 
 
+def test_target_instrument_is_case_insensitive():
+    # Regression test: "Piano" (as a user might naturally capitalize it, or
+    # as seen from a real 422 -- "Unknown instrument 'Piano'") should resolve
+    # the same as "piano".
+    part = _single_note_part("C4")
+    written, out_of_range = transpose_for_instrument(part, "Piano")
+
+    notes = list(written.recurse().notes)
+    assert notes[0].pitch.nameWithOctave == "C4"
+    assert out_of_range == []
+
+
 def test_non_transposing_instrument_keeps_pitch():
     # Piano is a non-transposing instrument -- concert and written pitch match.
     part = _single_note_part("C4")
