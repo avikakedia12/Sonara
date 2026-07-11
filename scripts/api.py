@@ -17,6 +17,7 @@ a symbolic score (MusicXML/MIDI from notation software) and call /braille or
 """
 import base64
 import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import Optional
@@ -26,7 +27,7 @@ from music21 import converter, stream
 
 from audio_input import AUDIO_EXTENSIONS
 from describe_score import build_description, speak_description
-from render_score import render_to_svg_pages
+from render_score import render_to_png_pages, render_to_svg_pages
 from to_braille import transcribe_to_braille
 from transcribe_audio import transcribe
 from transpose_score import INSTRUMENT_REGISTRY, transpose_for_instrument
@@ -110,6 +111,9 @@ def transcribe_endpoint(
         "thresholds_used": result["thresholds_used"],
         "tempo_bpm": result["tempo_bpm"],
         "sheet_music_svg": result["sheet_music_svg"],
+        "sheet_music_png_base64": [
+            base64.b64encode(p.read_bytes()).decode("ascii") for p in result["sheet_music_png_paths"]
+        ],
         "accuracy_note": (
             "Best-effort audio transcription, not guaranteed accurate. "
             "For guaranteed-accurate output, provide a symbolic score to /braille or /transpose instead."
@@ -183,6 +187,11 @@ def transpose_endpoint(
     out_path = score_path.parent / "transposed.musicxml"
     out_score.write("musicxml", fp=str(out_path))
 
+    try:
+        png_base64 = [base64.b64encode(png).decode("ascii") for png in render_to_png_pages(out_path)]
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        png_base64 = []  # PNG rendering is macOS-only (see render_score.py); sheet_music_svg still works everywhere
+
     _, low, high = INSTRUMENT_REGISTRY[target_instrument]
     response = {
         "musicxml": out_path.read_text(encoding="utf-8"),
@@ -190,6 +199,7 @@ def transpose_endpoint(
         "playable_range": {"low": low, "high": high},
         "out_of_range_notes": out_of_range,
         "sheet_music_svg": render_to_svg_pages(out_path),
+        "sheet_music_png_base64": png_base64,
     }
     if accuracy_note:
         response["accuracy_note"] = accuracy_note

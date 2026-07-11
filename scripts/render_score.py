@@ -1,17 +1,22 @@
-"""Render a MusicXML score into actual visual sheet music (SVG, one page per
-page of engraved notation) using verovio.
+"""Render a MusicXML score into actual visual sheet music -- SVG (vector) or
+PNG (raster), one page per page of engraved notation -- using verovio.
 
 verovio is a lightweight, pip-installable music engraving library -- unlike
 music21's own .write('musicxml.png'), it doesn't need a full desktop notation
 app (MuseScore Studio/LilyPond) installed, so rendering works headlessly
 wherever this package is installed (a server, a CI box, etc.).
 
-SVG rather than PNG/PDF: verovio renders natively to SVG (vector, scales
-cleanly, opens directly in a browser or most OS image viewers) without an
-extra image-conversion dependency (e.g. cairosvg) to go from SVG to a raster
-format.
+PNG rendering shells out to macOS's built-in `qlmanage` (Quick Look) to
+rasterize verovio's SVG output, rather than adding a PNG-rendering dependency
+(e.g. cairosvg) that itself needs a native library (libcairo) this machine
+doesn't have installed. This makes render_to_png_pages() macOS-only; a
+Linux/other-platform deployment would need cairosvg+libcairo (or an
+equivalent SVG rasterizer) swapped in instead.
 """
 import os
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 
 import verovio
@@ -41,3 +46,25 @@ def render_to_svg_pages(musicxml_path: Path) -> list[str]:
     if not tk.loadFile(str(musicxml_path)):
         raise ValueError(f"verovio could not load {musicxml_path} as MusicXML")
     return [tk.renderToSVG(page) for page in range(1, tk.getPageCount() + 1)]
+
+
+def render_to_png_pages(musicxml_path: Path, size: int = 1600) -> list[bytes]:
+    """Same as render_to_svg_pages, but rasterized to PNG bytes -- for
+    clients that just want an image to look at (e.g. embedded directly in an
+    API JSON response as base64), not vector markup to parse or re-render.
+    macOS-only (see module docstring)."""
+    svg_pages = render_to_svg_pages(musicxml_path)
+
+    png_pages = []
+    with tempfile.TemporaryDirectory(prefix="sonara_render_") as tmp_dir:
+        tmp_dir_path = Path(tmp_dir)
+        for i, svg in enumerate(svg_pages):
+            svg_path = tmp_dir_path / f"page{i}.svg"
+            svg_path.write_text(svg, encoding="utf-8")
+            subprocess.run(
+                ["qlmanage", "-t", "-s", str(size), "-o", str(tmp_dir_path), str(svg_path)],
+                check=True, capture_output=True,
+            )
+            png_path = tmp_dir_path / f"page{i}.svg.png"
+            png_pages.append(png_path.read_bytes())
+    return png_pages

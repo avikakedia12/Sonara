@@ -31,6 +31,7 @@ def _fake_transcribe_factory():
             "tempo_bpm": 120.0,
             "sheet_music_svg": ["<svg>fake</svg>"],
             "sheet_music_svg_paths": [],
+            "sheet_music_png_paths": [],
         }
     return fake_transcribe
 
