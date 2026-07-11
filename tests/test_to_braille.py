@@ -87,6 +87,20 @@ def test_transcribe_to_braille_part_index_out_of_range(tmp_path):
         transcribe_to_braille(xml_path, part_index=5)
 
 
+def test_transcribe_to_braille_invalid_quantize_raises_clear_error(tmp_path):
+    # Regression test: Swagger UI prefills optional string fields with the
+    # literal placeholder text "string" -- if a user doesn't clear it, this
+    # used to crash with a raw "invalid literal for int() with base 10:
+    # 'string'" instead of a client-facing, actionable error message.
+    part = stream.Part()
+    part.append(note.Note("C4", quarterLength=1.0))
+    xml_path = tmp_path / "score.musicxml"
+    _write_score(part, xml_path)
+
+    with pytest.raises(ValueError, match="quantize must be comma-separated integers"):
+        transcribe_to_braille(xml_path, quantize="string")
+
+
 def test_transcribe_to_braille_melody_only_reduces_chords(tmp_path):
     part = stream.Part()
     part.insert(0, meter.TimeSignature("4/4"))

@@ -98,7 +98,12 @@ def transcribe_to_braille(
         part = skyline_melody(part)
 
     if quantize:
-        divisors = tuple(int(x) for x in quantize.split(","))
+        try:
+            divisors = tuple(int(x) for x in quantize.split(","))
+        except ValueError:
+            raise ValueError(
+                f"quantize must be comma-separated integers (e.g. '4,3'), got {quantize!r}"
+            )
         part = part.quantize(divisors, processOffsets=True, processDurations=True)
 
     annotated_sections = []
