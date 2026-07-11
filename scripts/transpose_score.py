@@ -55,12 +55,24 @@ def transpose_for_instrument(part: stream.Part, target_name: str) -> tuple[strea
     cls, low_str, high_str = INSTRUMENT_REGISTRY[target_name.lower()]
     low, high = m21pitch.Pitch(low_str), m21pitch.Pitch(high_str)
 
+    new_instrument = cls()
+
     sounding = part.toSoundingPitch()
     for el in list(sounding.recurse().getElementsByClass(m21instrument.Instrument)):
         sounding.remove(el, recurse=True)
-    sounding.insert(0, cls())
+    sounding.insert(0, new_instrument)
     sounding.atSoundingPitch = True
     written = sounding.toWrittenPitch()
+
+    # toSoundingPitch/toWrittenPitch swap the Instrument *object* (already
+    # done above), but the Part's own partName/partAbbreviation -- a
+    # separate attribute, not derived from the Instrument -- isn't touched by
+    # that and keeps whatever the original part was labeled (e.g. a generic
+    # "Electric Piano" from audio transcription's MIDI conversion), producing
+    # a MusicXML <part-name> that contradicts the correct <instrument-name>/
+    # <midi-program> underneath it. Set it explicitly to match.
+    written.partName = new_instrument.instrumentName
+    written.partAbbreviation = new_instrument.instrumentAbbreviation
 
     out_of_range = []
     for n in written.recurse().notes:

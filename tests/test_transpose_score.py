@@ -9,6 +9,23 @@ def _single_note_part(pitch_name: str) -> stream.Part:
     return part
 
 
+def test_transpose_updates_part_name_to_match_new_instrument():
+    # Regression test: a part carrying over a stale partName from its
+    # original instrument (e.g. "Electric Piano" from audio transcription's
+    # generic MIDI-derived label) used to keep that label in the output
+    # MusicXML's <part-name> even after transposing to a completely
+    # different instrument, contradicting the correctly-updated
+    # <instrument-name>/<midi-program> underneath it.
+    part = _single_note_part("C4")
+    part.partName = "Electric Piano"
+    part.partAbbreviation = "E.Pno"
+
+    written, _ = transpose_for_instrument(part, "cello")
+
+    assert written.partName == "Violoncello"
+    assert written.partAbbreviation != "E.Pno"
+
+
 def test_all_registry_instruments_have_valid_low_high_range():
     for name, (cls, low, high) in INSTRUMENT_REGISTRY.items():
         from music21 import pitch as m21pitch
