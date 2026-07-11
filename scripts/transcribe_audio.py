@@ -209,6 +209,10 @@ def main():
              "127.70). Lower still for fast passage-work -- e.g. a wind quintet passage with notes as "
              "short as ~55ms was still losing notes at 40ms.",
     )
+    parser.add_argument(
+        "--no-show", action="store_true",
+        help="Don't automatically open the rendered sheet music (page 1) after writing it (macOS only)",
+    )
     args = parser.parse_args()
 
     result = transcribe(
@@ -219,6 +223,11 @@ def main():
     print(f"Wrote {len(result['sheet_music_svg_paths'])} page(s) of sheet music (.svg): {result['sheet_music_svg_paths']}")
     if result["sheet_music_png_paths"]:
         print(f"Wrote {len(result['sheet_music_png_paths'])} page(s) of sheet music (.png): {result['sheet_music_png_paths']}")
+        if not args.no_show:
+            try:
+                subprocess.run(["open", str(result["sheet_music_png_paths"][0])], check=True)
+            except (FileNotFoundError, subprocess.CalledProcessError) as exc:
+                print(f"(couldn't auto-open the sheet music image: {exc})")
     if not args.quantize:
         print(
             "Note: unquantized transcription can render as dense, hard-to-read notation "
