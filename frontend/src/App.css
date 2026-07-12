@@ -1,8 +1,36 @@
 .app {
+  position: relative;
   max-width: 880px;
   margin: 0 auto;
   padding: 2.5rem 1.5rem 4rem;
   min-height: 100svh;
+}
+
+/* Per-feature accent theming -- the whole page's accent color shifts to
+ * match the active tab, so each tool has its own identity while sharing one
+ * cohesive system (same shadows/radii/type, just a different hue). */
+.app[data-tab='transcribe'] { --accent: #6d28d9; --accent-hover: #5b21b6; --accent-bg: rgba(109, 40, 217, 0.08); }
+.app[data-tab='braille']    { --accent: #0f766e; --accent-hover: #0d9488; --accent-bg: rgba(15, 118, 110, 0.08); }
+.app[data-tab='transpose']  { --accent: #b45309; --accent-hover: #92400e; --accent-bg: rgba(180, 83, 9, 0.08); }
+.app[data-tab='describe']  { --accent: #be185d; --accent-hover: #9d174d; --accent-bg: rgba(190, 24, 93, 0.08); }
+
+@media (prefers-color-scheme: dark) {
+  .app[data-tab='transcribe'] { --accent: #a78bfa; --accent-hover: #c4b5fd; --accent-bg: rgba(167, 139, 250, 0.14); }
+  .app[data-tab='braille']    { --accent: #2dd4bf; --accent-hover: #5eead4; --accent-bg: rgba(45, 212, 191, 0.14); }
+  .app[data-tab='transpose']  { --accent: #fbbf24; --accent-hover: #fcd34d; --accent-bg: rgba(251, 191, 36, 0.14); }
+  .app[data-tab='describe']  { --accent: #f472b6; --accent-hover: #f9a8d4; --accent-bg: rgba(244, 114, 182, 0.14); }
+}
+
+.app-glow {
+  position: fixed;
+  inset: -12% -10% auto -10%;
+  height: 30rem;
+  background: radial-gradient(closest-side, var(--accent), transparent 72%);
+  opacity: 0.15;
+  filter: blur(70px);
+  z-index: -1;
+  pointer-events: none;
+  transition: background 0.4s ease;
 }
 
 /* ---------- Header ---------- */
@@ -28,6 +56,7 @@
   align-items: center;
   justify-content: center;
   box-shadow: var(--shadow-s);
+  transition: background 0.4s ease;
 }
 
 .brand-mark svg {
@@ -82,7 +111,21 @@
   background: transparent;
   color: var(--text-dim);
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+/* Each tab hints at its own color on hover, even before it's active --
+ * matches the accent that page switches the whole app to. */
+.tab:nth-child(1) { --tab-hue: #6d28d9; }
+.tab:nth-child(2) { --tab-hue: #0f766e; }
+.tab:nth-child(3) { --tab-hue: #b45309; }
+.tab:nth-child(4) { --tab-hue: #be185d; }
+
+@media (prefers-color-scheme: dark) {
+  .tab:nth-child(1) { --tab-hue: #a78bfa; }
+  .tab:nth-child(2) { --tab-hue: #2dd4bf; }
+  .tab:nth-child(3) { --tab-hue: #fbbf24; }
+  .tab:nth-child(4) { --tab-hue: #f472b6; }
 }
 
 .tab svg {
@@ -90,13 +133,15 @@
   height: 1.05rem;
 }
 
-.tab:hover {
-  color: var(--text-h);
+.tab:not(.active):hover {
+  background: color-mix(in srgb, var(--tab-hue) 14%, transparent);
+  color: var(--tab-hue);
 }
 
 .tab.active {
   background: var(--accent);
   color: var(--accent-contrast);
+  transform: scale(1.04);
 }
 
 /* ---------- Content card ---------- */
@@ -410,6 +455,50 @@ details summary {
   width: 100%;
   height: auto;
   display: block;
+}
+
+/* ---------- Empty state ---------- */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 2.75rem 1rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.empty-state-icon {
+  font-size: 2.1rem;
+  opacity: 0.7;
+}
+
+.empty-state p {
+  max-width: 32ch;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+/* ---------- Loading message ---------- */
+
+.loading-message {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin: -0.4rem 0 0;
+  animation: fade-in 0.25s ease-out;
+}
+
+/* ---------- Footer ---------- */
+
+.app-footer {
+  text-align: center;
+  margin-top: 2.5rem;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  max-width: 55ch;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 /* ---------- Responsive ---------- */

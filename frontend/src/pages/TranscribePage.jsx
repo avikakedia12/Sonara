@@ -1,15 +1,25 @@
 import { useState } from 'react'
 import { transcribe } from '../api'
 import { useAsyncAction } from '../hooks/useAsyncAction'
+import { useRotatingMessage } from '../hooks/useRotatingMessage'
 import SheetMusic from '../components/SheetMusic'
 import FileDrop from '../components/FileDrop'
+import EmptyState from '../components/EmptyState'
 import { Spinner } from '../components/Icons'
+
+const LOADING_MESSAGES = [
+  'Listening to the audio…',
+  'Detecting notes and onsets…',
+  'Estimating tempo and polyphony…',
+  'Engraving sheet music…',
+]
 
 export default function TranscribePage() {
   const [file, setFile] = useState(null)
   const [quantize, setQuantize] = useState('4')
   const [title, setTitle] = useState('')
   const { loading, error, result, run } = useAsyncAction()
+  const loadingMessage = useRotatingMessage(LOADING_MESSAGES, 3200, loading)
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -38,9 +48,14 @@ export default function TranscribePage() {
           {loading && <Spinner />}
           {loading ? 'Transcribing…' : 'Transcribe'}
         </button>
+        {loading && <p className="loading-message">{loadingMessage}</p>}
       </form>
 
       {error && <p className="error">Error: {error}</p>}
+
+      {!error && !result && !loading && (
+        <EmptyState icon="🎼" text="Upload a recording to see it turned into notated sheet music." />
+      )}
 
       {result && (
         <div className="result">

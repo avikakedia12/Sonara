@@ -1,14 +1,24 @@
 import { useState } from 'react'
 import { transpose, INSTRUMENTS } from '../api'
 import { useAsyncAction } from '../hooks/useAsyncAction'
+import { useRotatingMessage } from '../hooks/useRotatingMessage'
 import SheetMusic from '../components/SheetMusic'
 import FileDrop from '../components/FileDrop'
+import EmptyState from '../components/EmptyState'
 import { Spinner } from '../components/Icons'
+
+const LOADING_MESSAGES = [
+  'Reading the score…',
+  'Converting to concert pitch…',
+  'Transposing for the target instrument…',
+  'Checking playable range…',
+]
 
 export default function TransposePage() {
   const [file, setFile] = useState(null)
   const [targetInstrument, setTargetInstrument] = useState('clarinet')
   const { loading, error, result, run } = useAsyncAction()
+  const loadingMessage = useRotatingMessage(LOADING_MESSAGES, 3200, loading)
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -38,9 +48,14 @@ export default function TransposePage() {
           {loading && <Spinner />}
           {loading ? 'Transposing…' : 'Transpose'}
         </button>
+        {loading && <p className="loading-message">{loadingMessage}</p>}
       </form>
 
       {error && <p className="error">Error: {error}</p>}
+
+      {!error && !result && !loading && (
+        <EmptyState icon="🎻" text="Upload a score or audio file and pick a target instrument to transpose for." />
+      )}
 
       {result && (
         <div className="result">

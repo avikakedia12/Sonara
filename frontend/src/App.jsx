@@ -18,7 +18,9 @@ export default function App() {
   const ActivePage = TABS.find((t) => t.id === activeTab).Page
 
   return (
-    <div className="app">
+    <div className="app" data-tab={activeTab}>
+      <div className="app-glow" aria-hidden="true" />
+
       <header className="app-header">
         <div className="brand">
           <span className="brand-mark">
@@ -47,6 +49,10 @@ export default function App() {
       <main className="app-main">
         <ActivePage key={activeTab} />
       </main>
+
+      <footer className="app-footer">
+        <p>Best-effort ML pipeline &middot; accuracy varies by material &middot; built for accessibility, not a replacement for a human transcriber</p>
+      </footer>
     </div>
   )
 }

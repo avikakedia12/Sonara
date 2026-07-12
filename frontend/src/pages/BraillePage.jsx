@@ -1,8 +1,16 @@
 import { useState } from 'react'
 import { braille } from '../api'
 import { useAsyncAction } from '../hooks/useAsyncAction'
+import { useRotatingMessage } from '../hooks/useRotatingMessage'
 import FileDrop from '../components/FileDrop'
+import EmptyState from '../components/EmptyState'
 import { Spinner } from '../components/Icons'
+
+const LOADING_MESSAGES = [
+  'Reading the score…',
+  'Reducing to a single voice…',
+  'Laying out braille cells…',
+]
 
 export default function BraillePage() {
   const [file, setFile] = useState(null)
@@ -10,6 +18,7 @@ export default function BraillePage() {
   const [quantize, setQuantize] = useState('')
   const [partIndex, setPartIndex] = useState('0')
   const { loading, error, result, run } = useAsyncAction()
+  const loadingMessage = useRotatingMessage(LOADING_MESSAGES, 3200, loading)
 
   const isAudio = file && /\.(wav|mp3|flac|ogg|m4a|aiff?|aif)$/i.test(file.name)
 
@@ -46,9 +55,14 @@ export default function BraillePage() {
           {loading && <Spinner />}
           {loading ? 'Converting…' : 'Convert to Braille'}
         </button>
+        {loading && <p className="loading-message">{loadingMessage}</p>}
       </form>
 
       {error && <p className="error">Error: {error}</p>}
+
+      {!error && !result && !loading && (
+        <EmptyState icon="⠿" text="Upload a score or audio file to get Braille Music Code." />
+      )}
 
       {result && (
         <div className="result">

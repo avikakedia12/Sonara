@@ -1,14 +1,23 @@
 import { useState } from 'react'
 import { describe } from '../api'
 import { useAsyncAction } from '../hooks/useAsyncAction'
+import { useRotatingMessage } from '../hooks/useRotatingMessage'
 import FileDrop from '../components/FileDrop'
+import EmptyState from '../components/EmptyState'
 import { Spinner } from '../components/Icons'
+
+const LOADING_MESSAGES = [
+  'Reading the score…',
+  'Estimating key and tempo…',
+  'Composing the description…',
+]
 
 export default function DescribePage() {
   const [file, setFile] = useState(null)
   const [level, setLevel] = useState('standard')
   const [speak, setSpeak] = useState(false)
   const { loading, error, result, run } = useAsyncAction()
+  const loadingMessage = useRotatingMessage(LOADING_MESSAGES, 3200, loading)
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -46,9 +55,14 @@ export default function DescribePage() {
           {loading && <Spinner />}
           {loading ? 'Describing…' : 'Describe'}
         </button>
+        {loading && <p className="loading-message">{loadingMessage}</p>}
       </form>
 
       {error && <p className="error">Error: {error}</p>}
+
+      {!error && !result && !loading && (
+        <EmptyState icon="📝" text="Upload a score or audio file to get a structural description of the piece." />
+      )}
 
       {result && (
         <div className="result">
