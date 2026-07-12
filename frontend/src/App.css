@@ -1,190 +1,408 @@
 .app {
-  max-width: 900px;
+  max-width: 880px;
   margin: 0 auto;
-  padding: 0 1.5rem 3rem;
+  padding: 2.5rem 1.5rem 4rem;
   min-height: 100svh;
 }
 
+/* ---------- Header ---------- */
+
 .app-header {
   text-align: center;
-  padding: 2rem 0 1rem;
+  margin-bottom: 2rem;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.brand-mark {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-s);
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  color: var(--accent-contrast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-s);
+}
+
+.brand-mark svg {
+  width: 1.4rem;
+  height: 1.4rem;
 }
 
 .app-header h1 {
-  font-size: 2.5rem;
-  margin: 0 0 0.25rem;
+  font-size: 2.25rem;
+  margin: 0;
   letter-spacing: -0.02em;
 }
 
 .tagline {
-  color: var(--text);
-  opacity: 0.75;
-  margin: 0;
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--text-dim);
+  margin: 0.5rem 0 0;
+  font-size: 1.05rem;
 }
 
+/* ---------- Tab nav ---------- */
+
 .tabs {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: center;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 1rem;
-  margin-bottom: 2rem;
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.3rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: var(--shadow-s);
+  margin: 0 auto 2rem;
   flex-wrap: wrap;
+  justify-content: center;
+}
+
+.tabs-wrap {
+  display: flex;
+  justify-content: center;
 }
 
 .tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
   font: inherit;
-  padding: 0.5rem 1.1rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  padding: 0.5rem 1.05rem;
   border-radius: 999px;
-  border: 1px solid var(--border);
+  border: none;
   background: transparent;
-  color: var(--text);
+  color: var(--text-dim);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.tab svg {
+  width: 1.05rem;
+  height: 1.05rem;
 }
 
 .tab:hover {
-  border-color: var(--accent);
+  color: var(--text-h);
 }
 
 .tab.active {
-  background: var(--accent-bg);
-  border-color: var(--accent);
-  color: var(--accent);
-  font-weight: 600;
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+/* ---------- Content card ---------- */
+
+.app-main {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-m);
+  padding: 2rem 2.25rem 2.25rem;
 }
 
 .app-main section {
-  animation: fade-in 0.15s ease-out;
+  animation: fade-in 0.2s ease-out;
 }
 
 @keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: none; }
 }
 
 .page-blurb {
-  opacity: 0.75;
-  margin-bottom: 1.5rem;
-  line-height: 1.5;
+  color: var(--text-dim);
+  margin-bottom: 1.75rem;
+  line-height: 1.55;
+  max-width: 60ch;
 }
+
+/* ---------- Forms ---------- */
 
 form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.15rem;
   max-width: 480px;
 }
 
 form label {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  font-size: 0.9rem;
-  font-weight: 500;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 form label.checkbox-label {
   flex-direction: row;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.55rem;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.92rem;
+  color: var(--text);
+}
+
+input[type='checkbox'] {
+  width: 1.05rem;
+  height: 1.05rem;
+  accent-color: var(--accent);
 }
 
 input[type='text'],
 input[type='number'],
 select {
-  font: inherit;
-  padding: 0.5rem 0.65rem;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg);
+  font: 0.95rem/1.4 var(--sans);
+  font-weight: 500;
   color: var(--text-h);
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-input[type='file'] {
-  font: inherit;
-  color: var(--text);
+input[type='text']:focus,
+input[type='number']:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
 }
+
+/* ---------- File drop zone ---------- */
+
+.file-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  text-align: center;
+  padding: 1.75rem 1rem;
+  border-radius: var(--radius-m);
+  border: 1.5px dashed var(--border-strong);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.file-drop:hover,
+.file-drop:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  outline: none;
+}
+
+.file-drop.drag-over {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.file-drop-icon {
+  width: 1.6rem;
+  height: 1.6rem;
+  color: var(--text-dim);
+}
+
+.file-drop-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.9rem;
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 500;
+}
+
+.file-drop-hint {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
+.file-drop-filename {
+  font-weight: 600;
+  color: var(--text-h);
+  word-break: break-all;
+}
+
+/* ---------- Submit button ---------- */
 
 button[type='submit'] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   font: inherit;
-  font-weight: 600;
-  padding: 0.65rem 1.25rem;
-  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 0.7rem 1.4rem;
+  border-radius: var(--radius-s);
   border: none;
   background: var(--accent);
-  color: white;
+  color: var(--accent-contrast);
   cursor: pointer;
   align-self: flex-start;
-  transition: opacity 0.15s;
+  box-shadow: var(--shadow-s);
+  transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+button[type='submit']:hover:not(:disabled) {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-m);
+}
+
+button[type='submit']:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 button[type='submit']:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: not-allowed;
+  box-shadow: none;
+}
+
+.spinner {
+  width: 1.05rem;
+  height: 1.05rem;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .hint {
-  font-size: 0.85rem;
-  opacity: 0.7;
-  margin: -0.25rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  margin: -0.4rem 0 0;
 }
+
+/* ---------- Results ---------- */
 
 .error {
   color: var(--error);
   background: var(--error-bg);
-  border-radius: 6px;
-  padding: 0.75rem 1rem;
-  margin-top: 1rem;
+  border-radius: var(--radius-s);
+  padding: 0.85rem 1.1rem;
+  margin-top: 1.25rem;
   white-space: pre-wrap;
+  font-size: 0.9rem;
+  border-left: 3px solid var(--error);
 }
 
 .result {
   margin-top: 2rem;
-  padding-top: 1.5rem;
+  padding-top: 1.75rem;
   border-top: 1px solid var(--border);
+}
+
+.result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.result-meta li {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.3rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
 }
 
 .accuracy-note {
   font-size: 0.85rem;
-  opacity: 0.75;
+  color: var(--text-dim);
   font-style: italic;
-  margin: 0.5rem 0 1rem;
+  margin: 0 0 1.25rem;
+  border-left: 3px solid var(--border-strong);
+  padding-left: 0.75rem;
 }
 
 .description-text {
-  line-height: 1.6;
-  background: var(--bg-subtle);
-  padding: 1rem 1.25rem;
-  border-radius: 8px;
+  line-height: 1.65;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 1.1rem 1.35rem;
+  border-radius: var(--radius-m);
 }
 
 .braille-output {
-  background: var(--bg-subtle);
-  padding: 1rem 1.25rem;
-  border-radius: 8px;
+  background: var(--text-h);
+  color: #f0edf7;
+  padding: 1.25rem 1.5rem;
+  border-radius: var(--radius-m);
   overflow-x: auto;
-  font-size: 1.1rem;
-  line-height: 1.8;
+  font-size: 1.3rem;
+  letter-spacing: 0.04em;
+  line-height: 1.9;
   white-space: pre;
+  box-shadow: var(--shadow-s);
+}
+
+details {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  padding: 0.85rem 1.1rem;
+  margin-bottom: 1.25rem;
+}
+
+details summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
 }
 
 .out-of-range-list {
-  max-height: 240px;
+  max-height: 220px;
   overflow-y: auto;
-  font-size: 0.9rem;
-  padding-left: 1.25rem;
+  font-size: 0.87rem;
+  padding-left: 1.1rem;
+  margin: 0.75rem 0 0;
 }
+
+.out-of-range-list li {
+  padding: 0.15rem 0;
+  color: var(--text-dim);
+}
+
+/* ---------- Sheet music ---------- */
 
 .sheet-music {
   margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
 }
 
 .sheet-music-page {
-  background: white;
-  border-radius: 8px;
-  padding: 1rem;
-  margin-bottom: 1.5rem;
+  position: relative;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-s);
   overflow-x: auto;
 }
 
@@ -192,4 +410,18 @@ button[type='submit']:disabled {
   width: 100%;
   height: auto;
   display: block;
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 600px) {
+  .app {
+    padding: 1.5rem 1rem 3rem;
+  }
+  .app-main {
+    padding: 1.5rem 1.25rem 1.75rem;
+  }
+  form {
+    max-width: 100%;
+  }
 }

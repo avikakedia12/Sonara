@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { braille } from '../api'
 import { useAsyncAction } from '../hooks/useAsyncAction'
+import FileDrop from '../components/FileDrop'
+import { Spinner } from '../components/Icons'
 
 export default function BraillePage() {
   const [file, setFile] = useState(null)
@@ -26,10 +28,7 @@ export default function BraillePage() {
         engine handles far better than raw polyphony.
       </p>
       <form onSubmit={handleSubmit}>
-        <label>
-          Score or audio file
-          <input type="file" onChange={(e) => setFile(e.target.files[0])} required />
-        </label>
+        <FileDrop file={file} onChange={setFile} label="Drop a score or audio file" />
         <label>
           Part index
           <input type="number" min="0" value={partIndex} onChange={(e) => setPartIndex(e.target.value)} />
@@ -44,7 +43,8 @@ export default function BraillePage() {
         </label>
         {isAudio && <p className="hint">Audio input detected -- will be transcribed first (adaptive thresholds).</p>}
         <button type="submit" disabled={loading || !file}>
-          {loading ? 'Converting...' : 'Convert to Braille'}
+          {loading && <Spinner />}
+          {loading ? 'Converting…' : 'Convert to Braille'}
         </button>
       </form>
 
@@ -52,9 +52,9 @@ export default function BraillePage() {
 
       {result && (
         <div className="result">
-          <p>
-            Chunks transcribed: {result.chunks_transcribed} / {result.chunks_total}
-          </p>
+          <ul className="result-meta">
+            <li>{result.chunks_transcribed} / {result.chunks_total} chunks transcribed</li>
+          </ul>
           {result.accuracy_note && <p className="accuracy-note">{result.accuracy_note}</p>}
           {result.failed_chunks?.length > 0 && (
             <p className="error">Failed chunks (beats): {JSON.stringify(result.failed_chunks)}</p>

@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { describe } from '../api'
 import { useAsyncAction } from '../hooks/useAsyncAction'
+import FileDrop from '../components/FileDrop'
+import { Spinner } from '../components/Icons'
 
 export default function DescribePage() {
   const [file, setFile] = useState(null)
@@ -27,10 +29,7 @@ export default function DescribePage() {
         piece note-by-note. Optionally spoken aloud.
       </p>
       <form onSubmit={handleSubmit}>
-        <label>
-          Score or audio file
-          <input type="file" onChange={(e) => setFile(e.target.files[0])} required />
-        </label>
+        <FileDrop file={file} onChange={setFile} label="Drop a score or audio file" />
         <label>
           Detail level
           <select value={level} onChange={(e) => setLevel(e.target.value)}>
@@ -44,7 +43,8 @@ export default function DescribePage() {
           Also render as speech (requires pyttsx3 installed server-side)
         </label>
         <button type="submit" disabled={loading || !file}>
-          {loading ? 'Describing...' : 'Describe'}
+          {loading && <Spinner />}
+          {loading ? 'Describing…' : 'Describe'}
         </button>
       </form>
 
@@ -55,7 +55,7 @@ export default function DescribePage() {
           {result.accuracy_note && <p className="accuracy-note">{result.accuracy_note}</p>}
           <p className="description-text">{result.description}</p>
           {audioSrc && (
-            <audio controls src={audioSrc} style={{ width: '100%', marginTop: '1em' }}>
+            <audio controls src={audioSrc} style={{ width: '100%', marginTop: '1.25rem' }}>
               Your browser doesn't support inline audio playback.
             </audio>
           )}

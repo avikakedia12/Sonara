@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { transcribe } from '../api'
 import { useAsyncAction } from '../hooks/useAsyncAction'
 import SheetMusic from '../components/SheetMusic'
+import FileDrop from '../components/FileDrop'
+import { Spinner } from '../components/Icons'
 
 export default function TranscribePage() {
   const [file, setFile] = useState(null)
@@ -23,10 +25,7 @@ export default function TranscribePage() {
         in the result below.
       </p>
       <form onSubmit={handleSubmit}>
-        <label>
-          Audio file
-          <input type="file" accept="audio/*" onChange={(e) => setFile(e.target.files[0])} required />
-        </label>
+        <FileDrop file={file} onChange={setFile} accept="audio/*" label="Drop an audio file" />
         <label>
           Quantize (beat-grid subdivisions, e.g. 4 = 16th notes)
           <input type="number" min="1" value={quantize} onChange={(e) => setQuantize(e.target.value)} />
@@ -36,7 +35,8 @@ export default function TranscribePage() {
           <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="defaults to filename" />
         </label>
         <button type="submit" disabled={loading || !file}>
-          {loading ? 'Transcribing... (can take up to a minute or more)' : 'Transcribe'}
+          {loading && <Spinner />}
+          {loading ? 'Transcribing…' : 'Transcribe'}
         </button>
       </form>
 
@@ -44,10 +44,11 @@ export default function TranscribePage() {
 
       {result && (
         <div className="result">
-          <p>
-            Polyphony: {result.polyphony?.toFixed(2)} &middot; Tempo: {result.tempo_bpm?.toFixed(1)} BPM &middot;{' '}
-            Thresholds used: {JSON.stringify(result.thresholds_used)}
-          </p>
+          <ul className="result-meta">
+            <li>Polyphony {result.polyphony?.toFixed(2)}</li>
+            <li>{result.tempo_bpm?.toFixed(1)} BPM</li>
+            <li>onset {result.thresholds_used?.onset_threshold} / frame {result.thresholds_used?.frame_threshold}</li>
+          </ul>
           <p className="accuracy-note">{result.accuracy_note}</p>
           <SheetMusic pages={result.sheet_music_svg} />
         </div>

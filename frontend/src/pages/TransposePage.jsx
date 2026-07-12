@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { transpose, INSTRUMENTS } from '../api'
 import { useAsyncAction } from '../hooks/useAsyncAction'
 import SheetMusic from '../components/SheetMusic'
+import FileDrop from '../components/FileDrop'
+import { Spinner } from '../components/Icons'
 
 export default function TransposePage() {
   const [file, setFile] = useState(null)
@@ -23,10 +25,7 @@ export default function TransposePage() {
         silently altered -- that's a judgment call for a human.
       </p>
       <form onSubmit={handleSubmit}>
-        <label>
-          Score or audio file
-          <input type="file" onChange={(e) => setFile(e.target.files[0])} required />
-        </label>
+        <FileDrop file={file} onChange={setFile} label="Drop a score or audio file" />
         <label>
           Target instrument
           <select value={targetInstrument} onChange={(e) => setTargetInstrument(e.target.value)}>
@@ -36,7 +35,8 @@ export default function TransposePage() {
           </select>
         </label>
         <button type="submit" disabled={loading || !file}>
-          {loading ? 'Transposing...' : 'Transpose'}
+          {loading && <Spinner />}
+          {loading ? 'Transposing…' : 'Transpose'}
         </button>
       </form>
 
@@ -44,10 +44,10 @@ export default function TransposePage() {
 
       {result && (
         <div className="result">
-          <p>
-            Target: {result.target_instrument} &middot; Playable range: {result.playable_range?.low}
-            {' '}&ndash;{' '}{result.playable_range?.high}
-          </p>
+          <ul className="result-meta">
+            <li>Target: {result.target_instrument}</li>
+            <li>Range {result.playable_range?.low}&ndash;{result.playable_range?.high}</li>
+          </ul>
           {result.accuracy_note && <p className="accuracy-note">{result.accuracy_note}</p>}
           {result.out_of_range_notes?.length > 0 && (
             <details>
