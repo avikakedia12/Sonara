@@ -33,6 +33,11 @@ services:
     envVars:
       - key: VITE_API_BASE
         value: https://sonara-backend.onrender.com
+      # Vite 8 requires Node ^20.19.0 || >=22.12.0 -- pinned explicitly since
+      # Render's default Node version for static sites isn't guaranteed to
+      # satisfy that.
+      - key: NODE_VERSION
+        value: "22"
     routes:
       - type: rewrite
         source: /*
