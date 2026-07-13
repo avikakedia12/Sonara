@@ -1,0 +1,21 @@
+# Core pipeline + API dependencies (see README's Setup section).
+# Left unpinned deliberately: basic-pitch pulls in a platform-specific
+# TensorFlow/CoreML/ONNX backend as a transitive dependency, and pinning an
+# exact version here risks resolving to a wheel that doesn't exist on the
+# deploy target's platform (e.g. Linux vs macOS).
+librosa
+numpy
+music21
+basic-pitch
+mir_eval
+fastapi
+uvicorn
+python-multipart
+verovio
+yt-dlp
+
+# NOT included: pyttsx3 (optional, only needed for /describe's speak=true).
+# Its TTS backend depends on OS-level support (e.g. espeak on Linux) that
+# isn't guaranteed present on a deployment target -- describe_score.py
+# already degrades speak=true to a clean 422 if pyttsx3 isn't installed,
+# rather than crashing, so it's safe to omit here.

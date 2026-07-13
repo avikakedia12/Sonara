@@ -46,7 +46,7 @@ def test_root_lists_all_endpoints():
     resp = client.get("/")
     assert resp.status_code == 200
     data = resp.json()
-    assert set(data["endpoints"]) == {"/transcribe", "/braille", "/transpose", "/describe"}
+    assert set(data["endpoints"]) == {"/transcribe", "/braille", "/transpose", "/describe", "/difficulty"}
 
 
 def test_transpose_endpoint_success(simple_musicxml_bytes):
@@ -190,6 +190,46 @@ def test_describe_endpoint_speak_missing_pyttsx3_returns_422(simple_musicxml_byt
     assert resp.status_code == 422
 
 
+def test_difficulty_endpoint_success(simple_musicxml_bytes):
+    resp = client.post(
+        "/difficulty",
+        files={"score": ("test.musicxml", simple_musicxml_bytes, "application/xml")},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert 0.0 <= data["overall_score"] <= 10.0
+    assert data["overall_level"] in ("Beginner", "Easy", "Intermediate", "Advanced", "Virtuosic")
+    assert "Estimated difficulty" in data["summary"]
+    assert len(data["per_part"]) == 1
+    assert "accuracy_note" not in data  # symbolic input, no transcription happened
+
+
+def test_difficulty_endpoint_audio_input_sets_accuracy_note(fake_transcribe):
+    resp = client.post(
+        "/difficulty",
+        files={"score": ("test.wav", b"fake audio bytes", "audio/wav")},
+    )
+    assert resp.status_code == 200
+    assert "accuracy_note" in resp.json()
+
+
+def test_difficulty_endpoint_youtube_url_downloads_then_rates(monkeypatch, tmp_path, fake_transcribe):
+    downloaded = tmp_path / "abc123.m4a"
+    downloaded.write_bytes(b"fake m4a bytes")
+    monkeypatch.setattr(api, "download_youtube_audio", lambda url, out_dir: downloaded)
+
+    resp = client.post("/difficulty", data={"youtube_url": "https://youtube.com/watch?v=abc123"})
+
+    assert resp.status_code == 200
+    assert "accuracy_note" in resp.json()
+
+
+def test_difficulty_endpoint_neither_file_nor_youtube_url_is_422():
+    resp = client.post("/difficulty", data={})
+    assert resp.status_code == 422
+    assert "Provide either a file or a youtube_url" in resp.json()["detail"]
+
+
 def test_transcribe_endpoint(fake_transcribe):
     resp = client.post(
         "/transcribe",
@@ -214,3 +254,53 @@ def test_transcribe_endpoint_failure_surfaces_as_422(monkeypatch):
     )
     assert resp.status_code == 422
     assert "model blew up" in resp.json()["detail"]
+
+
+def test_transcribe_endpoint_neither_file_nor_youtube_url_is_422():
+    resp = client.post("/transcribe", data={})
+    assert resp.status_code == 422
+    assert "Provide either a file or a youtube_url" in resp.json()["detail"]
+
+
+def test_transcribe_endpoint_both_file_and_youtube_url_is_422():
+    resp = client.post(
+        "/transcribe",
+        files={"audio": ("test.wav", b"fake audio bytes", "audio/wav")},
+        data={"youtube_url": "https://youtube.com/watch?v=abc123"},
+    )
+    assert resp.status_code == 422
+    assert "not both" in resp.json()["detail"]
+
+
+def test_transcribe_endpoint_youtube_url_downloads_then_transcribes(monkeypatch, tmp_path, fake_transcribe):
+    downloaded = tmp_path / "abc123.m4a"
+    downloaded.write_bytes(b"fake m4a bytes")
+    monkeypatch.setattr(api, "download_youtube_audio", lambda url, out_dir: downloaded)
+
+    resp = client.post("/transcribe", data={"youtube_url": "https://youtube.com/watch?v=abc123"})
+
+    assert resp.status_code == 200
+    assert resp.json()["polyphony"] == 1.0
+
+
+def test_transcribe_endpoint_youtube_url_unsupported_format_is_422(monkeypatch, tmp_path):
+    downloaded = tmp_path / "abc123.webm"
+    downloaded.write_bytes(b"fake webm bytes")
+    monkeypatch.setattr(api, "download_youtube_audio", lambda url, out_dir: downloaded)
+
+    resp = client.post("/transcribe", data={"youtube_url": "https://youtube.com/watch?v=abc123"})
+
+    assert resp.status_code == 422
+    assert ".webm" in resp.json()["detail"]
+
+
+def test_transcribe_endpoint_youtube_url_download_failure_surfaces_as_422(monkeypatch):
+    def failing_download(url, out_dir):
+        raise RuntimeError("Could not download audio from that YouTube URL: video unavailable")
+
+    monkeypatch.setattr(api, "download_youtube_audio", failing_download)
+
+    resp = client.post("/transcribe", data={"youtube_url": "https://youtube.com/watch?v=deadbeef"})
+
+    assert resp.status_code == 422
+    assert "video unavailable" in resp.json()["detail"]

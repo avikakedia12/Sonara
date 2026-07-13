@@ -3,7 +3,7 @@ import { transcribe } from '../api'
 import { useAsyncAction } from '../hooks/useAsyncAction'
 import { useRotatingMessage } from '../hooks/useRotatingMessage'
 import SheetMusic from '../components/SheetMusic'
-import FileDrop from '../components/FileDrop'
+import AudioSourceInput from '../components/AudioSourceInput'
 import EmptyState from '../components/EmptyState'
 import { Spinner } from '../components/Icons'
 
@@ -15,16 +15,18 @@ const LOADING_MESSAGES = [
 ]
 
 export default function TranscribePage() {
-  const [file, setFile] = useState(null)
+  const [source, setSource] = useState({ file: null })
   const [quantize, setQuantize] = useState('4')
   const [title, setTitle] = useState('')
   const { loading, error, result, run } = useAsyncAction()
   const loadingMessage = useRotatingMessage(LOADING_MESSAGES, 3200, loading)
 
+  const hasSource = Boolean(source.file || source.youtubeUrl)
+
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (!file) return
-    run(() => transcribe(file, { quantize, title }))
+    if (!hasSource) return
+    run(() => transcribe(source, { quantize, title }))
   }
 
   return (
@@ -35,7 +37,7 @@ export default function TranscribePage() {
         in the result below.
       </p>
       <form onSubmit={handleSubmit}>
-        <FileDrop file={file} onChange={setFile} accept="audio/*" label="Drop an audio file" />
+        <AudioSourceInput source={source} onChange={setSource} accept="audio/*" label="Drop an audio file" />
         <label>
           Quantize (beat-grid subdivisions, e.g. 4 = 16th notes)
           <input type="number" min="1" value={quantize} onChange={(e) => setQuantize(e.target.value)} />
@@ -44,7 +46,7 @@ export default function TranscribePage() {
           Title (optional)
           <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="defaults to filename" />
         </label>
-        <button type="submit" disabled={loading || !file}>
+        <button type="submit" disabled={loading || !hasSource}>
           {loading && <Spinner />}
           {loading ? 'Transcribing…' : 'Transcribe'}
         </button>
@@ -54,7 +56,7 @@ export default function TranscribePage() {
       {error && <p className="error">Error: {error}</p>}
 
       {!error && !result && !loading && (
-        <EmptyState icon="🎼" text="Upload a recording to see it turned into notated sheet music." />
+        <EmptyState icon="🎼" text="Upload a recording (or paste a YouTube link) to see it turned into notated sheet music." />
       )}
 
       {result && (

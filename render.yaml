@@ -1,0 +1,39 @@
+# Render Blueprint -- https://render.com/docs/blueprint-spec
+#
+# Two services: a long-running Python web service for the FastAPI + ML
+# backend (NOT serverless -- basic-pitch's model load and audio
+# transcription can take a minute or more, which would blow past a
+# serverless function's execution limit), and a static site for the Vite
+# frontend build.
+#
+# The two envVars below hardcode each other's expected onrender.com URL
+# rather than using Render's fromService cross-references, since that
+# behavior wasn't independently verifiable while writing this file. If
+# "sonara-backend" or "sonara-frontend" is already taken and Render assigns
+# a different hostname on first deploy, update FRONTEND_ORIGIN and
+# VITE_API_BASE below (or in the Render dashboard) to match, then redeploy.
+services:
+  - type: web
+    name: sonara-backend
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api:app --app-dir scripts --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: FRONTEND_ORIGIN
+        value: https://sonara-frontend.onrender.com
+      - key: PYTHON_VERSION
+        value: 3.11.9
+
+  - type: web
+    name: sonara-frontend
+    runtime: static
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: VITE_API_BASE
+        value: https://sonara-backend.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

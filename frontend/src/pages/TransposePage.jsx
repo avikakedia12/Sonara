@@ -3,7 +3,7 @@ import { transpose, INSTRUMENTS } from '../api'
 import { useAsyncAction } from '../hooks/useAsyncAction'
 import { useRotatingMessage } from '../hooks/useRotatingMessage'
 import SheetMusic from '../components/SheetMusic'
-import FileDrop from '../components/FileDrop'
+import AudioSourceInput from '../components/AudioSourceInput'
 import EmptyState from '../components/EmptyState'
 import { Spinner } from '../components/Icons'
 
@@ -15,15 +15,17 @@ const LOADING_MESSAGES = [
 ]
 
 export default function TransposePage() {
-  const [file, setFile] = useState(null)
+  const [source, setSource] = useState({ file: null })
   const [targetInstrument, setTargetInstrument] = useState('clarinet')
   const { loading, error, result, run } = useAsyncAction()
   const loadingMessage = useRotatingMessage(LOADING_MESSAGES, 3200, loading)
 
+  const hasSource = Boolean(source.file || source.youtubeUrl)
+
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (!file) return
-    run(() => transpose(file, targetInstrument))
+    if (!hasSource) return
+    run(() => transpose(source, targetInstrument))
   }
 
   return (
@@ -35,7 +37,7 @@ export default function TransposePage() {
         silently altered -- that's a judgment call for a human.
       </p>
       <form onSubmit={handleSubmit}>
-        <FileDrop file={file} onChange={setFile} label="Drop a score or audio file" />
+        <AudioSourceInput source={source} onChange={setSource} label="Drop a score or audio file" />
         <label>
           Target instrument
           <select value={targetInstrument} onChange={(e) => setTargetInstrument(e.target.value)}>
@@ -44,7 +46,7 @@ export default function TransposePage() {
             ))}
           </select>
         </label>
-        <button type="submit" disabled={loading || !file}>
+        <button type="submit" disabled={loading || !hasSource}>
           {loading && <Spinner />}
           {loading ? 'Transposing…' : 'Transpose'}
         </button>
@@ -54,7 +56,7 @@ export default function TransposePage() {
       {error && <p className="error">Error: {error}</p>}
 
       {!error && !result && !loading && (
-        <EmptyState icon="🎻" text="Upload a score or audio file and pick a target instrument to transpose for." />
+        <EmptyState icon="🎻" text="Upload a score or audio file (or paste a YouTube link) and pick a target instrument." />
       )}
 
       {result && (

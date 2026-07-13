@@ -104,6 +104,26 @@ pip install pyttsx3
 python scripts/describe_score.py data/transcribed/my_piece.musicxml --speak --tts-out my_piece_description.aiff
 ```
 
+### 5. Difficulty (`scripts/difficulty_score.py`)
+
+MusicXML/MIDI/etc. (or a raw audio file) → an estimated performance difficulty per part (0-10, mapped to Beginner/Easy/Intermediate/Advanced/Virtuosic), plus the exact numbers behind the rating rather than just a label.
+
+Each factor is a deterministic, rule-based measurement — no ML model, nothing trained on a difficulty-graded corpus:
+
+- **Rhythm** — fastest note value present, tuplet usage, and share of note onsets landing off the beat.
+- **Melodic leaps** — average interval between consecutive notes, and how many exceed an octave.
+- **Chord density** — share of note-events that are chords, and average chord size.
+- **Tempo & pace** — notes/second at the marked tempo (or 120bpm if none is present).
+- **Pitch range** — ambitus in semitones.
+- **Key signature** — number of sharps/flats.
+- **Time signature** — irregular/compound meters and meter changes.
+
+A weighted combination of these gives each part's score; the piece's overall score is its hardest part's. Treat the numbers as "harder than X, easier than Y" signal, not a certified grade level — same spirit as Transpose's hand-curated instrument ranges, not a substitute for a teacher's judgment. Same audio-input handling as Braille/Transpose/Describe: an audio file extension runs through `transcribe_audio.transcribe` first, with the same accuracy caveats.
+
+```bash
+python scripts/difficulty_score.py data/transcribed/my_piece.musicxml --out difficulty_report.json
+```
+
 ## Accuracy work
 
 ### Evaluation methodology
@@ -139,7 +159,7 @@ This was investigated further with a broader 7-piece calibration set spanning so
 
 ## API (`scripts/api.py`)
 
-A FastAPI service wrapping the four working pipeline stages as REST endpoints — thin request/response handling only, no logic duplicated from the scripts above.
+A FastAPI service wrapping the five working pipeline stages as REST endpoints — thin request/response handling only, no logic duplicated from the scripts above.
 
 ```bash
 uvicorn api:app --reload --port 8000
@@ -148,22 +168,25 @@ uvicorn api:app --reload --port 8000
 
 | Endpoint | Input | Output |
 |---|---|---|
-| `POST /transcribe` | audio file (+ optional `quantize`, `title`, thresholds) | `{musicxml, polyphony, thresholds_used, tempo_bpm, sheet_music_svg, accuracy_note}` |
-| `POST /braille` | score file *or* audio file (+ `part_index`, `melody_only`, `quantize`, `chunk_beats`, and if audio: `transcribe_quantize`, thresholds) | `{brl, brf, chunks_transcribed, chunks_total, failed_chunks, accuracy_note if input was audio}` |
-| `POST /transpose` | score file *or* audio file + `target_instrument` (+ `part_index`, and if audio: `quantize`, thresholds) | `{musicxml, target_instrument, playable_range, out_of_range_notes, sheet_music_svg, accuracy_note if input was audio}` |
-| `POST /describe` | score file *or* audio file (+ `level`, `speak`, and if audio: `transcribe_quantize`, thresholds) | `{description, level, accuracy_note if input was audio, audio_base64 + audio_format if speak=true}` |
+| `POST /transcribe` | audio file *or* `youtube_url` (+ optional `quantize`, `title`, thresholds) | `{musicxml, polyphony, thresholds_used, tempo_bpm, sheet_music_svg, accuracy_note}` |
+| `POST /braille` | score file, audio file, *or* `youtube_url` (+ `part_index`, `melody_only`, `quantize`, `chunk_beats`, and if audio: `transcribe_quantize`, thresholds) | `{brl, brf, chunks_transcribed, chunks_total, failed_chunks, accuracy_note if input was audio}` |
+| `POST /transpose` | score file, audio file, *or* `youtube_url` + `target_instrument` (+ `part_index`, and if audio: `quantize`, thresholds) | `{musicxml, target_instrument, playable_range, out_of_range_notes, sheet_music_svg, accuracy_note if input was audio}` |
+| `POST /describe` | score file, audio file, *or* `youtube_url` (+ `level`, `speak`, and if audio: `transcribe_quantize`, thresholds) | `{description, level, accuracy_note if input was audio, audio_base64 + audio_format if speak=true}` |
+| `POST /difficulty` | score file, audio file, *or* `youtube_url` (+ if audio: `transcribe_quantize`, thresholds) | `{overall_score, overall_level, hardest_part, summary, per_part: [{name, score, level, factors}], accuracy_note if input was audio}` |
 
 `/transcribe`'s response always includes `accuracy_note`, since transcription accuracy is best-effort (see Accuracy work below) — the API doesn't let that caveat get silently lost the way a bare file download would. `/braille`, `/transpose`, and `/describe` include the same `accuracy_note` when their input was audio (they transcribe internally first), and omit it when given a symbolic score directly. `/describe`'s `speak=true` requires `pyttsx3` to be installed server-side (see Setup) and returns the rendered speech as base64-encoded AIFF.
+
+Every endpoint accepts a `youtube_url` form field as an alternative to uploading a file (exactly one of the two must be provided) — the audio track is downloaded via `yt-dlp` (`scripts/youtube_input.py`) and fed into the same pipeline as any other audio upload.
 
 `sheet_music_svg` (`/transcribe` and `/transpose`) is the score actually rendered to visual notation -- one SVG string per page, via `scripts/render_score.py` (uses [verovio](https://www.verovio.org/), a lightweight engraving library, so no desktop notation app like MuseScore/LilyPond needs to be installed). Raw, unquantized transcription can render as dense/hard-to-read notation (irregular tuplets and ties); pass `quantize` for cleaner sheet music.
 
 ## Setup
 
 ```bash
-pip install librosa numpy music21 basic-pitch mir_eval fastapi uvicorn python-multipart verovio
+pip install librosa numpy music21 basic-pitch mir_eval fastapi uvicorn python-multipart verovio yt-dlp
 ```
 
-(`basic-pitch` pulls in `pretty_midi` and a TensorFlow/CoreML/ONNX backend as transitive dependencies, depending on platform.)
+(`basic-pitch` pulls in `pretty_midi` and a TensorFlow/CoreML/ONNX backend as transitive dependencies, depending on platform. `yt-dlp` is used only for the `youtube_url` input option on the API endpoints — no `ffmpeg` needed, since it downloads the audio-only stream directly; see `scripts/youtube_input.py`.)
 
 `pyttsx3` is an additional, optional dependency needed only for Describe's `--speak`/`speak=true` speech rendering:
 
@@ -178,7 +201,7 @@ pip install pytest httpx  # httpx is needed by FastAPI's TestClient
 pytest
 ```
 
-Covers the deterministic logic across all four scripts (transpose range-checking, Braille chunking, Describe's text generation, the MusicNet CSV/W-score plumbing) and every API endpoint's request/response contract, using synthetic scores and a faked `transcribe()` so the suite runs in ~2 seconds without invoking real basic-pitch inference. A separate `pytest -m slow` runs three additional true end-to-end tests against real audio transcription (`data/sample/1727_clip30.wav`, several seconds each, skipped by default) — these are the ones that would catch an actual regression in the transcription pipeline itself rather than just its call site. Tests that need `data/sample/` are skipped automatically if that gitignored directory isn't populated locally.
+Covers the deterministic logic across all five scripts (transpose range-checking, Braille chunking, Describe's text generation, Difficulty's factor scoring, the MusicNet CSV/W-score plumbing) and every API endpoint's request/response contract, using synthetic scores and a faked `transcribe()` so the suite runs in ~2 seconds without invoking real basic-pitch inference. A separate `pytest -m slow` runs three additional true end-to-end tests against real audio transcription (`data/sample/1727_clip30.wav`, several seconds each, skipped by default) — these are the ones that would catch an actual regression in the transcription pipeline itself rather than just its call site. Tests that need `data/sample/` are skipped automatically if that gitignored directory isn't populated locally.
 
 ## Layout
 
@@ -188,6 +211,27 @@ data/        MusicNet ground-truth label CSVs (<id>.csv) + data/sample/ audio an
 archive/     raw MusicNet download (audio, labels, MIDI, metadata) used to regenerate data/
 ```
 
+## Deployment
+
+`render.yaml` at the repo root is a [Render Blueprint](https://render.com/docs/blueprint-spec) defining two services:
+
+- `sonara-backend` — a Python **web service** (long-running, not serverless: basic-pitch's model load and audio transcription can take a minute or more, which would blow past a serverless function's execution limit) running `uvicorn api:app --app-dir scripts --host 0.0.0.0 --port $PORT`, deps from `requirements.txt` at the repo root.
+- `sonara-frontend` — a **static site** built from `frontend/` (`npm install && npm run build`, publishing `frontend/dist`), with SPA-style routing so any path falls back to `index.html`.
+
+To deploy: push to GitHub, then in Render, "New" → "Blueprint" → point it at this repo. Render reads `render.yaml` and provisions both services.
+
+The two services need to know each other's URL:
+
+- `sonara-backend`'s `FRONTEND_ORIGIN` env var must match the frontend's deployed URL (used for CORS — see `scripts/api.py`).
+- `sonara-frontend`'s `VITE_API_BASE` build-time env var must match the backend's deployed URL (see `frontend/src/api.js`).
+
+`render.yaml` hardcodes both as `https://sonara-<backend|frontend>.onrender.com`, which is what Render assigns if those service names are available. **If either name is already taken**, Render will suffix it (e.g. `sonara-backend-ab12`) — check the actual assigned URLs after first deploy and update both env vars (in the Render dashboard, or in `render.yaml` + redeploy) to match if they differ.
+
+Known gaps, not yet handled:
+- No rate limiting — every endpoint (including the ones that download audio from a `youtube_url`) is open to the public internet once deployed. Worth adding before real traffic.
+- `/describe`'s `speak=true` needs `pyttsx3` plus a working OS-level TTS backend (e.g. `espeak` on Linux) — deliberately not installed on the deployed backend (see `requirements.txt`), so `speak=true` will return a clean 422 there rather than working.
+- basic-pitch pulls in a TensorFlow/CoreML/ONNX backend depending on platform; on Render's Linux containers this resolves to TensorFlow, which is memory-hungry. If the backend fails to build or crashes under load on Render's free tier, it likely needs a paid instance type with more RAM.
+
 ## Status
 
-Early-stage. Transcribe → Braille → Transpose → Describe all work end-to-end on sample audio, with an evaluation harness against real ground truth for transcription accuracy, and an automated `pytest` suite (85 fast tests + 3 slow real-audio integration tests) covering all four scripts and the API.
+Early-stage. Transcribe → Braille → Transpose → Describe → Difficulty all work end-to-end on sample audio, with an evaluation harness against real ground truth for transcription accuracy, and an automated `pytest` suite (120 fast tests + 3 slow real-audio integration tests) covering all five scripts and the API.

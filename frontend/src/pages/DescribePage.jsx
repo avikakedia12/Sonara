@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { describe } from '../api'
 import { useAsyncAction } from '../hooks/useAsyncAction'
 import { useRotatingMessage } from '../hooks/useRotatingMessage'
-import FileDrop from '../components/FileDrop'
+import AudioSourceInput from '../components/AudioSourceInput'
 import EmptyState from '../components/EmptyState'
 import { Spinner } from '../components/Icons'
 
@@ -13,16 +13,18 @@ const LOADING_MESSAGES = [
 ]
 
 export default function DescribePage() {
-  const [file, setFile] = useState(null)
+  const [source, setSource] = useState({ file: null })
   const [level, setLevel] = useState('standard')
   const [speak, setSpeak] = useState(false)
   const { loading, error, result, run } = useAsyncAction()
   const loadingMessage = useRotatingMessage(LOADING_MESSAGES, 3200, loading)
 
+  const hasSource = Boolean(source.file || source.youtubeUrl)
+
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (!file) return
-    run(() => describe(file, { level, speak }))
+    if (!hasSource) return
+    run(() => describe(source, { level, speak }))
   }
 
   const audioSrc = result?.audio_base64
@@ -38,7 +40,7 @@ export default function DescribePage() {
         piece note-by-note. Optionally spoken aloud.
       </p>
       <form onSubmit={handleSubmit}>
-        <FileDrop file={file} onChange={setFile} label="Drop a score or audio file" />
+        <AudioSourceInput source={source} onChange={setSource} label="Drop a score or audio file" />
         <label>
           Detail level
           <select value={level} onChange={(e) => setLevel(e.target.value)}>
@@ -51,7 +53,7 @@ export default function DescribePage() {
           <input type="checkbox" checked={speak} onChange={(e) => setSpeak(e.target.checked)} />
           Also render as speech (requires pyttsx3 installed server-side)
         </label>
-        <button type="submit" disabled={loading || !file}>
+        <button type="submit" disabled={loading || !hasSource}>
           {loading && <Spinner />}
           {loading ? 'Describing…' : 'Describe'}
         </button>
@@ -61,7 +63,7 @@ export default function DescribePage() {
       {error && <p className="error">Error: {error}</p>}
 
       {!error && !result && !loading && (
-        <EmptyState icon="📝" text="Upload a score or audio file to get a structural description of the piece." />
+        <EmptyState icon="📝" text="Upload a score or audio file (or paste a YouTube link) to get a structural description." />
       )}
 
       {result && (

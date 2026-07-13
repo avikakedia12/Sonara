@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { braille } from '../api'
 import { useAsyncAction } from '../hooks/useAsyncAction'
 import { useRotatingMessage } from '../hooks/useRotatingMessage'
-import FileDrop from '../components/FileDrop'
+import AudioSourceInput from '../components/AudioSourceInput'
 import EmptyState from '../components/EmptyState'
 import { Spinner } from '../components/Icons'
 
@@ -13,19 +13,20 @@ const LOADING_MESSAGES = [
 ]
 
 export default function BraillePage() {
-  const [file, setFile] = useState(null)
+  const [source, setSource] = useState({ file: null })
   const [melodyOnly, setMelodyOnly] = useState(true)
   const [quantize, setQuantize] = useState('')
   const [partIndex, setPartIndex] = useState('0')
   const { loading, error, result, run } = useAsyncAction()
   const loadingMessage = useRotatingMessage(LOADING_MESSAGES, 3200, loading)
 
-  const isAudio = file && /\.(wav|mp3|flac|ogg|m4a|aiff?|aif)$/i.test(file.name)
+  const hasSource = Boolean(source.file || source.youtubeUrl)
+  const isAudio = Boolean(source.youtubeUrl) || (source.file && /\.(wav|mp3|flac|ogg|m4a|aiff?|aif)$/i.test(source.file.name))
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (!file) return
-    run(() => braille(file, { partIndex, melodyOnly, quantize }))
+    if (!hasSource) return
+    run(() => braille(source, { partIndex, melodyOnly, quantize }))
   }
 
   return (
@@ -37,7 +38,7 @@ export default function BraillePage() {
         engine handles far better than raw polyphony.
       </p>
       <form onSubmit={handleSubmit}>
-        <FileDrop file={file} onChange={setFile} label="Drop a score or audio file" />
+        <AudioSourceInput source={source} onChange={setSource} label="Drop a score or audio file" />
         <label>
           Part index
           <input type="number" min="0" value={partIndex} onChange={(e) => setPartIndex(e.target.value)} />
@@ -51,7 +52,7 @@ export default function BraillePage() {
           <input type="text" value={quantize} onChange={(e) => setQuantize(e.target.value)} placeholder="e.g. 4,3" />
         </label>
         {isAudio && <p className="hint">Audio input detected -- will be transcribed first (adaptive thresholds).</p>}
-        <button type="submit" disabled={loading || !file}>
+        <button type="submit" disabled={loading || !hasSource}>
           {loading && <Spinner />}
           {loading ? 'Converting…' : 'Convert to Braille'}
         </button>
@@ -61,7 +62,7 @@ export default function BraillePage() {
       {error && <p className="error">Error: {error}</p>}
 
       {!error && !result && !loading && (
-        <EmptyState icon="⠿" text="Upload a score or audio file to get Braille Music Code." />
+        <EmptyState icon="⠿" text="Upload a score or audio file (or paste a YouTube link) to get Braille Music Code." />
       )}
 
       {result && (

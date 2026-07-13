@@ -43,6 +43,25 @@ export function DescribeIcon(props) {
   )
 }
 
+export function WelcomeIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M4 5h16v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5z" />
+      <path d="M9 5v9M15 5v9" />
+    </svg>
+  )
+}
+
+export function DifficultyIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M4 19a8 8 0 0 1 16 0" />
+      <path d="M12 19l4.5-6.5" />
+      <path d="M4 19h.01M20 19h.01M12 6.5h.01" />
+    </svg>
+  )
+}
+
 export function UploadIcon(props) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>

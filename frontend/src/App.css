@@ -13,12 +13,14 @@
 .app[data-tab='braille']    { --accent: #0f766e; --accent-hover: #0d9488; --accent-bg: rgba(15, 118, 110, 0.08); }
 .app[data-tab='transpose']  { --accent: #b45309; --accent-hover: #92400e; --accent-bg: rgba(180, 83, 9, 0.08); }
 .app[data-tab='describe']  { --accent: #be185d; --accent-hover: #9d174d; --accent-bg: rgba(190, 24, 93, 0.08); }
+.app[data-tab='difficulty'] { --accent: #1d4ed8; --accent-hover: #1e40af; --accent-bg: rgba(29, 78, 216, 0.08); }
 
 @media (prefers-color-scheme: dark) {
   .app[data-tab='transcribe'] { --accent: #a78bfa; --accent-hover: #c4b5fd; --accent-bg: rgba(167, 139, 250, 0.14); }
   .app[data-tab='braille']    { --accent: #2dd4bf; --accent-hover: #5eead4; --accent-bg: rgba(45, 212, 191, 0.14); }
   .app[data-tab='transpose']  { --accent: #fbbf24; --accent-hover: #fcd34d; --accent-bg: rgba(251, 191, 36, 0.14); }
   .app[data-tab='describe']  { --accent: #f472b6; --accent-hover: #f9a8d4; --accent-bg: rgba(244, 114, 182, 0.14); }
+  .app[data-tab='difficulty'] { --accent: #60a5fa; --accent-hover: #93c5fd; --accent-bg: rgba(96, 165, 250, 0.14); }
 }
 
 .app-glow {
@@ -33,39 +35,86 @@
   transition: background 0.4s ease;
 }
 
+/* ---------- Hero (full-bleed piano banner, title overlaid on top) ---------- */
+
+.hero {
+  position: relative;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-top: -2.5rem;
+  margin-bottom: 2.5rem;
+  min-height: 100svh;
+  overflow: hidden;
+  background:
+    radial-gradient(60% 50% at 50% 20%, rgba(109, 40, 217, 0.16), transparent 70%),
+    radial-gradient(50% 45% at 50% 85%, rgba(249, 115, 22, 0.12), transparent 70%),
+    var(--bg-canvas);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (prefers-color-scheme: dark) {
+  .hero {
+    background:
+      radial-gradient(60% 50% at 50% 20%, rgba(167, 139, 250, 0.22), transparent 70%),
+      radial-gradient(50% 45% at 50% 85%, rgba(251, 146, 60, 0.16), transparent 70%),
+      var(--bg-canvas);
+  }
+}
+
 /* ---------- Header ---------- */
 
 .app-header {
+  position: relative;
+  z-index: 2;
   text-align: center;
-  margin-bottom: 2rem;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-m);
+  padding: 2.5rem 3.5rem;
+  margin: 0;
+  /* Sits visually on top of the piano, but has no interactive children of
+   * its own -- let clicks pass through to whatever piano key is underneath
+   * so the logo card never turns keys behind it dead. */
+  pointer-events: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .app-header {
+    background: rgba(19, 18, 24, 0.78);
+  }
 }
 
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.85rem;
 }
 
 .brand-mark {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: var(--radius-s);
+  width: 3.75rem;
+  height: 3.75rem;
+  border-radius: var(--radius-m);
   background: linear-gradient(135deg, var(--accent), var(--accent-hover));
   color: var(--accent-contrast);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--shadow-s);
+  box-shadow: var(--shadow-m);
   transition: background 0.4s ease;
 }
 
 .brand-mark svg {
-  width: 1.4rem;
-  height: 1.4rem;
+  width: 2.1rem;
+  height: 2.1rem;
 }
 
 .app-header h1 {
-  font-size: 2.25rem;
+  font-size: 3.5rem;
   margin: 0;
   letter-spacing: -0.02em;
 }
@@ -73,9 +122,17 @@
 .tagline {
   font-family: var(--serif);
   font-style: italic;
+  font-weight: 600;
+  color: var(--accent);
+  margin: 1rem 0 0;
+  font-size: 1.5rem;
+  letter-spacing: 0.01em;
+}
+
+.tagline-sub {
   color: var(--text-dim);
   margin: 0.5rem 0 0;
-  font-size: 1.05rem;
+  font-size: 0.95rem;
 }
 
 /* ---------- Tab nav ---------- */
@@ -117,15 +174,19 @@
 /* Each tab hints at its own color on hover, even before it's active --
  * matches the accent that page switches the whole app to. */
 .tab:nth-child(1) { --tab-hue: #6d28d9; }
-.tab:nth-child(2) { --tab-hue: #0f766e; }
-.tab:nth-child(3) { --tab-hue: #b45309; }
-.tab:nth-child(4) { --tab-hue: #be185d; }
+.tab:nth-child(2) { --tab-hue: #6d28d9; }
+.tab:nth-child(3) { --tab-hue: #0f766e; }
+.tab:nth-child(4) { --tab-hue: #b45309; }
+.tab:nth-child(5) { --tab-hue: #be185d; }
+.tab:nth-child(6) { --tab-hue: #1d4ed8; }
 
 @media (prefers-color-scheme: dark) {
   .tab:nth-child(1) { --tab-hue: #a78bfa; }
-  .tab:nth-child(2) { --tab-hue: #2dd4bf; }
-  .tab:nth-child(3) { --tab-hue: #fbbf24; }
-  .tab:nth-child(4) { --tab-hue: #f472b6; }
+  .tab:nth-child(2) { --tab-hue: #a78bfa; }
+  .tab:nth-child(3) { --tab-hue: #2dd4bf; }
+  .tab:nth-child(4) { --tab-hue: #fbbf24; }
+  .tab:nth-child(5) { --tab-hue: #f472b6; }
+  .tab:nth-child(6) { --tab-hue: #60a5fa; }
 }
 
 .tab svg {
@@ -168,6 +229,182 @@
   margin-bottom: 1.75rem;
   line-height: 1.55;
   max-width: 60ch;
+}
+
+/* ---------- Piano hero ---------- */
+
+.piano-hero {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.piano {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  width: 100%;
+  height: 62%;
+  padding: 20px 5vw 45px;
+  margin: 0 auto;
+  max-width: 1600px;
+}
+
+.piano-key {
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transform-origin: bottom center;
+  transition: filter 0.15s ease;
+}
+
+.piano-key:hover,
+.piano-key:focus-visible {
+  filter: brightness(1.1);
+}
+
+.piano-key:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.piano-key-white {
+  flex: 1;
+  min-width: 0;
+  height: min(320px, 34vh);
+  background: var(--surface);
+  border: 1.5px solid var(--accent-bg);
+  border-radius: 0 0 10px 10px;
+  box-shadow: var(--shadow-s);
+}
+
+.piano-key-black {
+  position: absolute;
+  bottom: 45px;
+  width: 6%;
+  height: min(210px, 22vh);
+  border-radius: 0 0 8px 8px;
+  background: linear-gradient(180deg, #6d28d9, #f97316);
+  box-shadow: var(--shadow-m);
+  z-index: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  .piano-key-black {
+    background: linear-gradient(180deg, #a78bfa, #fb923c);
+  }
+}
+
+.piano-preview {
+  position: absolute;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  max-width: min(480px, 90vw);
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-m);
+  padding: 1rem 1.5rem;
+}
+
+.piano-preview:empty {
+  display: none;
+}
+
+.piano-preview-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  margin: 0 0 0.5rem;
+}
+
+.piano-preview-notes {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0;
+  margin: 0 0 1rem;
+  list-style: none;
+}
+
+.piano-preview-notes li {
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 0.9rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+}
+
+.piano-preview-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.6rem;
+}
+
+.piano-preview-actions button {
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 0.5rem 1.1rem;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.piano-preview-actions button:first-child {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.piano-preview-actions button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.piano-preview-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.hero-scroll-hint {
+  position: absolute;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  animation: bob 2s ease-in-out infinite;
+}
+
+.hero-scroll-hint svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+@keyframes bob {
+  0%, 100% { transform: translate(-50%, 0); }
+  50% { transform: translate(-50%, 6px); }
 }
 
 /* ---------- Forms ---------- */
@@ -283,6 +520,60 @@ select:focus {
   font-weight: 600;
   color: var(--text-h);
   word-break: break-all;
+}
+
+/* ---------- Audio source (file vs YouTube URL) ---------- */
+
+.audio-source {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.source-toggle {
+  display: inline-flex;
+  gap: 0.2rem;
+  padding: 0.2rem;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  align-self: flex-start;
+}
+
+.source-toggle-btn {
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.source-toggle-btn.active {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow-s);
+}
+
+.youtube-url-input {
+  font: 0.95rem/1.4 var(--sans);
+  font-weight: 500;
+  color: var(--text-h);
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-m);
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.youtube-url-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
 }
 
 /* ---------- Submit button ---------- */
@@ -457,6 +748,126 @@ details summary {
   display: block;
 }
 
+/* ---------- Difficulty ---------- */
+
+.difficulty-headline {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.difficulty-score-value {
+  font-size: 3rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-h);
+}
+
+.difficulty-score-value small {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.difficulty-level-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.difficulty-parts {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.difficulty-part {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  padding: 1.1rem 1.35rem 1.35rem;
+}
+
+.difficulty-part-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+
+.difficulty-part-header h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.difficulty-part-score {
+  font-weight: 700;
+  color: var(--accent);
+  font-size: 0.9rem;
+}
+
+.difficulty-factors {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.difficulty-factor-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.difficulty-factor-label {
+  flex: 0 0 8.5rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* Meter: a single-hue fill on a neutral track -- magnitude only, not a
+ * status/severity signal, so it stays in the page's one accent color rather
+ * than shifting hue as the score rises (a "hard" piece isn't an error state). */
+.difficulty-factor-track {
+  flex: 1;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.difficulty-factor-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.difficulty-factor-value {
+  flex: 0 0 2.6rem;
+  text-align: right;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.difficulty-factor-detail {
+  margin: 0 0 0 calc(8.5rem + 0.75rem);
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
 /* ---------- Empty state ---------- */
 
 .empty-state {
@@ -512,5 +923,26 @@ details summary {
   }
   form {
     max-width: 100%;
+  }
+  .difficulty-factor-row {
+    flex-wrap: wrap;
+  }
+  .difficulty-factor-label {
+    flex: 1 1 100%;
+  }
+  .difficulty-factor-detail {
+    margin-left: 0;
+  }
+  .hero {
+    margin-top: -1.5rem;
+  }
+  .app-header {
+    padding: 1.5rem 1.75rem;
+  }
+  .piano {
+    padding: 10px 3vw 30px;
+  }
+  .piano-key-black {
+    bottom: 30px;
   }
 }

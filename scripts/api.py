@@ -16,6 +16,7 @@ a symbolic score (MusicXML/MIDI from notation software) and call /braille or
 /transpose directly, skipping /transcribe.
 """
 import base64
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -28,10 +29,12 @@ from music21 import converter, stream
 
 from audio_input import AUDIO_EXTENSIONS
 from describe_score import build_description, speak_description
+from difficulty_score import build_difficulty_report
 from render_score import render_to_svg_pages
 from to_braille import transcribe_to_braille
 from transcribe_audio import transcribe
 from transpose_score import INSTRUMENT_REGISTRY, transpose_for_instrument
+from youtube_input import download_youtube_audio
 
 app = FastAPI(
     title="Sonara",
@@ -39,12 +42,13 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# Local-dev-only: lets the Vite frontend (localhost:5173 by default) call this
-# API (localhost:8000) despite being a different origin. Both sides only ever
-# run on localhost in this project, so a permissive localhost/127.0.0.1
-# allowlist is fine here -- this isn't a public deployment.
+# localhost/127.0.0.1 (any port) always allowed for local dev. The deployed
+# frontend's origin comes from FRONTEND_ORIGIN (comma-separated if there's
+# more than one) -- unset in local dev, where only the regex below applies.
+_frontend_origins = [o.strip() for o in os.environ.get("FRONTEND_ORIGIN", "").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=_frontend_origins,
     allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_methods=["*"],
     allow_headers=["*"],
@@ -58,6 +62,34 @@ def _save_upload(upload: UploadFile, default_suffix: str) -> Path:
     with dest.open("wb") as f:
         shutil.copyfileobj(upload.file, f)
     return dest
+
+
+def _resolve_input_path(
+    upload: Optional[UploadFile], youtube_url: Optional[str], default_suffix: str
+) -> Path:
+    """Every endpoint accepts either a direct file upload or a youtube_url --
+    exactly one must be provided. A YouTube URL downloads to an audio file
+    (see youtube_input.py), which then flows through the same audio-vs-score
+    handling (AUDIO_EXTENSIONS check in _maybe_transcribe/transcribe_endpoint)
+    as any other audio upload -- no special-casing needed downstream."""
+    if youtube_url and upload:
+        raise HTTPException(status_code=422, detail="Provide either a file or a youtube_url, not both.")
+    if youtube_url:
+        tmp_dir = Path(tempfile.mkdtemp(prefix="sonara_api_"))
+        try:
+            path = download_youtube_audio(youtube_url, tmp_dir)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        if path.suffix.lower() not in AUDIO_EXTENSIONS:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Downloaded {path.suffix} audio from that URL, which isn't a supported format "
+                       f"({sorted(AUDIO_EXTENSIONS)}). Try a different video.",
+            )
+        return path
+    if upload:
+        return _save_upload(upload, default_suffix)
+    raise HTTPException(status_code=422, detail="Provide either a file or a youtube_url.")
 
 
 def _maybe_transcribe(
@@ -100,7 +132,8 @@ def _load_part(score_path: Path, part_index: int) -> stream.Part:
 
 @app.post("/transcribe")
 def transcribe_endpoint(
-    audio: UploadFile = File(..., description="Audio file (wav/mp3/etc.)"),
+    audio: Optional[UploadFile] = File(None, description="Audio file (wav/mp3/etc.) -- or provide youtube_url instead"),
+    youtube_url: Optional[str] = Form(None, description="YouTube URL to download audio from, as an alternative to uploading a file"),
     quantize: Optional[int] = Form(None, description="Beat-grid subdivisions, e.g. 4 = 16th notes; omit for raw timing"),
     title: Optional[str] = Form(None),
     onset_threshold: Optional[float] = Form(None, description="Fix a threshold instead of adaptive selection"),
@@ -109,8 +142,8 @@ def transcribe_endpoint(
         None, description="basic-pitch's note-length floor in ms (default 40.0, tuned lower than basic-pitch's stock 127.70); lower still for fast passage-work"
     ),
 ):
-    """Audio -> MusicXML. Best-effort draft, not guaranteed accurate (see module docstring)."""
-    audio_path = _save_upload(audio, ".wav")
+    """Audio (file or YouTube URL) -> MusicXML. Best-effort draft, not guaranteed accurate (see module docstring)."""
+    audio_path = _resolve_input_path(audio, youtube_url, ".wav")
     out_dir = audio_path.parent / "out"
     try:
         result = transcribe(audio_path, out_dir, title, quantize, onset_threshold, frame_threshold, minimum_note_length)
@@ -132,7 +165,8 @@ def transcribe_endpoint(
 
 @app.post("/braille")
 def braille_endpoint(
-    score: UploadFile = File(..., description="MusicXML/MIDI/etc. score, OR a raw audio file (wav/mp3/etc.) to transcribe first"),
+    score: Optional[UploadFile] = File(None, description="MusicXML/MIDI/etc. score, OR a raw audio file (wav/mp3/etc.) to transcribe first -- or provide youtube_url instead"),
+    youtube_url: Optional[str] = Form(None, description="YouTube URL to download audio from, as an alternative to uploading a file"),
     part_index: int = Form(0),
     melody_only: bool = Form(False, description="Collapse to a single top-note line (for dense/noisy input)"),
     quantize: Optional[str] = Form(None, description="Braille rhythm quantization: comma-separated divisors, e.g. '4,3' (not related to transcribe_quantize below)"),
@@ -144,8 +178,8 @@ def braille_endpoint(
         None, description="If input is audio: basic-pitch's note-length floor in ms (default 40.0, tuned lower than basic-pitch's stock 127.70); lower still for fast passage-work"
     ),
 ):
-    """Score or audio -> Braille Music Code (.brl annotated text + .brf embosser-ready ASCII)."""
-    upload_path = _save_upload(score, ".musicxml")
+    """Score, audio file, or YouTube URL -> Braille Music Code (.brl annotated text + .brf embosser-ready ASCII)."""
+    upload_path = _resolve_input_path(score, youtube_url, ".musicxml")
     score_path, accuracy_note = _maybe_transcribe(
         upload_path, transcribe_quantize, onset_threshold, frame_threshold, minimum_note_length
     )
@@ -168,7 +202,8 @@ def braille_endpoint(
 
 @app.post("/transpose")
 def transpose_endpoint(
-    score: UploadFile = File(..., description="MusicXML/MIDI/etc. score, OR a raw audio file (wav/mp3/etc.) to transcribe first"),
+    score: Optional[UploadFile] = File(None, description="MusicXML/MIDI/etc. score, OR a raw audio file (wav/mp3/etc.) to transcribe first -- or provide youtube_url instead"),
+    youtube_url: Optional[str] = Form(None, description="YouTube URL to download audio from, as an alternative to uploading a file"),
     target_instrument: str = Form(..., description=f"One of: {sorted(INSTRUMENT_REGISTRY)}"),
     part_index: int = Form(0),
     quantize: Optional[int] = Form(None, description="If input is audio: beat-grid subdivisions, e.g. 4 (ignored for symbolic input)"),
@@ -178,14 +213,14 @@ def transpose_endpoint(
         None, description="If input is audio: basic-pitch's note-length floor in ms (default 40.0, tuned lower than basic-pitch's stock 127.70); lower still for fast passage-work"
     ),
 ):
-    """Score or audio + target instrument -> transposed MusicXML + range-violation report."""
+    """Score, audio file, or YouTube URL + target instrument -> transposed MusicXML + range-violation report."""
     target_instrument = target_instrument.lower()
     if target_instrument not in INSTRUMENT_REGISTRY:
         raise HTTPException(
             status_code=422,
             detail=f"Unknown instrument '{target_instrument}'. Choices: {sorted(INSTRUMENT_REGISTRY)}",
         )
-    upload_path = _save_upload(score, ".musicxml")
+    upload_path = _resolve_input_path(score, youtube_url, ".musicxml")
     score_path, accuracy_note = _maybe_transcribe(upload_path, quantize, onset_threshold, frame_threshold, minimum_note_length)
 
     part = _load_part(score_path, part_index)
@@ -212,7 +247,8 @@ def transpose_endpoint(
 
 @app.post("/describe")
 async def describe_endpoint(
-    score: UploadFile = File(..., description="MusicXML/MIDI/etc. score, OR a raw audio file (wav/mp3/etc.) to transcribe first"),
+    score: Optional[UploadFile] = File(None, description="MusicXML/MIDI/etc. score, OR a raw audio file (wav/mp3/etc.) to transcribe first -- or provide youtube_url instead"),
+    youtube_url: Optional[str] = Form(None, description="YouTube URL to download audio from, as an alternative to uploading a file"),
     level: str = Form("standard", description="brief | standard | detailed"),
     speak: bool = Form(False, description="Also render the description to speech audio (base64 AIFF in the response)"),
     transcribe_quantize: Optional[int] = Form(None, description="If input is audio: beat-grid subdivisions, e.g. 4 (ignored for symbolic input)"),
@@ -222,7 +258,7 @@ async def describe_endpoint(
         None, description="If input is audio: basic-pitch's note-length floor in ms (default 40.0, tuned lower than basic-pitch's stock 127.70); lower still for fast passage-work"
     ),
 ):
-    """Score or audio -> structural text description, optionally spoken aloud.
+    """Score, audio file, or YouTube URL -> structural text description, optionally spoken aloud.
 
     Unlike the other three endpoints, this one is async def (runs on the main
     thread) rather than plain def (runs in Starlette's worker thread pool):
@@ -236,7 +272,7 @@ async def describe_endpoint(
     if level not in ("brief", "standard", "detailed"):
         raise HTTPException(status_code=422, detail="level must be one of: brief, standard, detailed")
 
-    upload_path = _save_upload(score, ".musicxml")
+    upload_path = _resolve_input_path(score, youtube_url, ".musicxml")
     score_path, accuracy_note = _maybe_transcribe(
         upload_path, transcribe_quantize, onset_threshold, frame_threshold, minimum_note_length
     )
@@ -265,11 +301,42 @@ async def describe_endpoint(
     return response
 
 
+@app.post("/difficulty")
+def difficulty_endpoint(
+    score: Optional[UploadFile] = File(None, description="MusicXML/MIDI/etc. score, OR a raw audio file (wav/mp3/etc.) to rate first -- or provide youtube_url instead"),
+    youtube_url: Optional[str] = Form(None, description="YouTube URL to download audio from, as an alternative to uploading a file"),
+    transcribe_quantize: Optional[int] = Form(None, description="If input is audio: beat-grid subdivisions, e.g. 4 (ignored for symbolic input)"),
+    onset_threshold: Optional[float] = Form(None, description="If input is audio: fix a threshold instead of adaptive selection"),
+    frame_threshold: Optional[float] = Form(None),
+    minimum_note_length: Optional[float] = Form(
+        None, description="If input is audio: basic-pitch's note-length floor in ms (default 40.0, tuned lower than basic-pitch's stock 127.70); lower still for fast passage-work"
+    ),
+):
+    """Score, audio file, or YouTube URL -> estimated performance difficulty (0-10 per part,
+    plus the exact rhythm/range/leap/chord/key/tempo numbers behind the rating). A deterministic,
+    rule-based heuristic (see difficulty_score.py docstring) -- not a certified grade level."""
+    upload_path = _resolve_input_path(score, youtube_url, ".musicxml")
+    score_path, accuracy_note = _maybe_transcribe(
+        upload_path, transcribe_quantize, onset_threshold, frame_threshold, minimum_note_length
+    )
+
+    parsed = converter.parse(str(score_path))
+    if not isinstance(parsed, stream.Score):
+        wrapped = stream.Score()
+        wrapped.insert(0, parsed)
+        parsed = wrapped
+
+    response = build_difficulty_report(parsed)
+    if accuracy_note:
+        response["accuracy_note"] = accuracy_note
+    return response
+
+
 @app.get("/")
 async def root():
     return {
         "name": "Sonara",
-        "endpoints": ["/transcribe", "/braille", "/transpose", "/describe"],
+        "endpoints": ["/transcribe", "/braille", "/transpose", "/describe", "/difficulty"],
         "docs": "/docs",
         "view": "/view",
     }
