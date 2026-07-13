@@ -71,6 +71,15 @@ export function UploadIcon(props) {
   )
 }
 
+export function DownloadIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M12 4v12M12 16l-4-4M12 16l4-4" />
+      <path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
+    </svg>
+  )
+}
+
 export function Spinner(props) {
   return (
     <svg className="spinner" viewBox="0 0 24 24" fill="none" {...props}>

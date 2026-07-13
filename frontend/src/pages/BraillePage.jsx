@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { braille } from '../api'
+import { downloadFile } from '../downloadFile'
 import { useAsyncAction } from '../hooks/useAsyncAction'
 import { useRotatingMessage } from '../hooks/useRotatingMessage'
 import AudioSourceInput from '../components/AudioSourceInput'
 import EmptyState from '../components/EmptyState'
-import { Spinner } from '../components/Icons'
+import { DownloadIcon, Spinner } from '../components/Icons'
 
 const LOADING_MESSAGES = [
   'Reading the score…',
@@ -74,6 +75,14 @@ export default function BraillePage() {
           {result.failed_chunks?.length > 0 && (
             <p className="error">Failed chunks (beats): {JSON.stringify(result.failed_chunks)}</p>
           )}
+          <div className="download-actions">
+            <button type="button" className="download-button" onClick={() => downloadFile('braille.brl', result.brl)}>
+              <DownloadIcon /> Download .brl
+            </button>
+            <button type="button" className="download-button" onClick={() => downloadFile('braille.brf', result.brf)}>
+              <DownloadIcon /> Download .brf (embosser-ready)
+            </button>
+          </div>
           <h3>Braille (.brl)</h3>
           <pre className="braille-output">{result.brl}</pre>
         </div>

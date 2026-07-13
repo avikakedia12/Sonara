@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { transpose, INSTRUMENTS } from '../api'
+import { downloadFile } from '../downloadFile'
 import { useAsyncAction } from '../hooks/useAsyncAction'
 import { useRotatingMessage } from '../hooks/useRotatingMessage'
 import SheetMusic from '../components/SheetMusic'
 import AudioSourceInput from '../components/AudioSourceInput'
 import EmptyState from '../components/EmptyState'
-import { Spinner } from '../components/Icons'
+import { DownloadIcon, Spinner } from '../components/Icons'
 
 const LOADING_MESSAGES = [
   'Reading the score…',
@@ -76,6 +77,15 @@ export default function TransposePage() {
               </ul>
             </details>
           )}
+          <div className="download-actions">
+            <button
+              type="button"
+              className="download-button"
+              onClick={() => downloadFile(`transposed_${result.target_instrument}.musicxml`, result.musicxml, 'application/vnd.recordare.musicxml+xml')}
+            >
+              <DownloadIcon /> Download MusicXML
+            </button>
+          </div>
           <SheetMusic pages={result.sheet_music_svg} />
         </div>
       )}
