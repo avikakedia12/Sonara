@@ -1,18 +1,21 @@
 # Core pipeline + API dependencies (see README's Setup section).
-# Left unpinned deliberately: basic-pitch pulls in a platform-specific
-# TensorFlow/CoreML/ONNX backend as a transitive dependency, and pinning an
-# exact version here risks resolving to a wheel that doesn't exist on the
-# deploy target's platform (e.g. Linux vs macOS).
-librosa
-numpy
-music21
-basic-pitch
-mir_eval
-fastapi
-uvicorn
-python-multipart
-verovio
-yt-dlp
+# Pinned to versions verified locally (Python 3.11) -- leaving these
+# unpinned let pip's resolver backtrack across dozens of old releases
+# trying to satisfy basic-pitch's transitive constraints, and crashed
+# trying to build a years-old numpy from source once no prebuilt wheel
+# existed for the interpreter version Render happened to use. Pinned,
+# modern versions have prebuilt wheels for any current CPython, so pip
+# fetches them directly instead of searching or compiling.
+librosa==0.11.0
+numpy==2.4.6
+music21==10.5.0
+basic-pitch==0.4.0
+mir_eval==0.8.2
+fastapi==0.139.0
+uvicorn==0.51.0
+python-multipart==0.0.32
+verovio==6.2.1
+yt-dlp==2026.7.4
 
 # NOT included: pyttsx3 (optional, only needed for /describe's speak=true).
 # Its TTS backend depends on OS-level support (e.g. espeak on Linux) that

@@ -22,8 +22,16 @@ services:
     envVars:
       - key: FRONTEND_ORIGIN
         value: https://sonara-frontend.onrender.com
+      # Pinned because leaving this unset let Render fall back to its
+      # latest default (observed running Python 3.14 in a failed build),
+      # which has no prebuilt wheels yet for several pinned packages below
+      # and made pip try to compile them from source instead. If this
+      # still doesn't take effect after a redeploy, set PYTHON_VERSION
+      # directly on the service in the Render dashboard's Environment tab
+      # -- Blueprint env var changes don't always propagate to an
+      # already-created service without an explicit sync.
       - key: PYTHON_VERSION
-        value: 3.11.9
+        value: "3.11"
 
   - type: web
     name: sonara-frontend
