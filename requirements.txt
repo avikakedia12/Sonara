@@ -27,10 +27,18 @@
 # tflite-runtime is the fix basic-pitch itself documents for this case:
 # a ~2MB purpose-built inference runtime, not a general ML framework,
 # so importing it doesn't carry anywhere near that memory cost.
+#
+# --no-deps skips *all* of basic-pitch's dependencies, not just
+# tensorflow -- pretty_midi and resampy (unlike scikit-learn/scipy,
+# which librosa already pulls in) aren't required by anything else
+# here, so they're listed explicitly below with basic-pitch's own
+# version constraints (from its METADATA) to keep them satisfied.
 librosa==0.11.0
 numpy<2.0
 music21==10.5.0
 tflite-runtime==2.14.0; sys_platform == "linux"
+pretty_midi>=0.2.9
+resampy<0.4.3,>=0.2.2
 mir_eval==0.8.2
 fastapi==0.139.0
 uvicorn==0.51.0
