@@ -25,6 +25,7 @@ the probe.
 """
 import argparse
 import subprocess
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -109,6 +110,13 @@ def transcribe(
     polyphony = thresholds_used = tempo_bpm = None
     min_note_len_kwarg = {"minimum_note_length": 40.0 if minimum_note_length is None else minimum_note_length}
 
+    # Coarse phase timing -- logged unconditionally (cheap, and this pipeline's
+    # wall-clock cost is dominated by a few expensive steps whose relative
+    # weight isn't obvious from the outside; e.g. it's what showed a slow
+    # deploy was basic-pitch inference on a CPU-constrained instance, not
+    # notation writing or SVG rendering, which are comparatively instant).
+    t0 = time.perf_counter()
+
     # Beat-tracking (librosa) and note transcription (basic-pitch) both read
     # audio_path but don't depend on each other's output, so run librosa's
     # beat-tracking in a background thread while the (much slower) basic-pitch
@@ -133,6 +141,9 @@ def transcribe(
                     **min_note_len_kwarg,
                 )
 
+        t_inference = time.perf_counter()
+        print(f"[timing] basic-pitch inference: {t_inference - t0:.1f}s")
+
         if quantize:
             tempo_bpm, beat_times = beat_future.result()
             print(f"Detected tempo: {tempo_bpm:.1f} BPM, {len(beat_times)} beats")
@@ -142,11 +153,17 @@ def transcribe(
             midi_data.write(str(midi_path))
             score = converter.parse(str(midi_path))
 
+    t_notation = time.perf_counter()
+    print(f"[timing] MIDI->music21 notation: {t_notation - t_inference:.1f}s")
+
     score.metadata = m21metadata.Metadata()
     score.metadata.title = title or audio_path.stem
 
     musicxml_path = out_dir / f"{audio_path.stem}.musicxml"
     score.write("musicxml", fp=str(musicxml_path))
+
+    t_musicxml = time.perf_counter()
+    print(f"[timing] musicxml write: {t_musicxml - t_notation:.1f}s")
 
     svg_pages = render_to_svg_pages(musicxml_path)
     svg_paths = []
@@ -154,6 +171,9 @@ def transcribe(
         svg_path = out_dir / f"{audio_path.stem}_page{i}.svg"
         svg_path.write_text(svg, encoding="utf-8")
         svg_paths.append(svg_path)
+
+    t_svg = time.perf_counter()
+    print(f"[timing] verovio SVG render: {t_svg - t_musicxml:.1f}s | total: {t_svg - t0:.1f}s")
 
     return {
         "path": musicxml_path,
