@@ -379,6 +379,66 @@
   cursor: not-allowed;
 }
 
+.piano-reveal {
+  animation: fade-in 0.5s ease-out;
+}
+
+.piano-reveal-message {
+  margin: 0 0 1rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text-h);
+}
+
+.piano-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.piano-logo-icon {
+  width: 1.8rem;
+  height: 1.8rem;
+  color: #8b5cf6;
+  flex-shrink: 0;
+}
+
+.piano-logo-word {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  background: linear-gradient(90deg, #7c3aed, #f97316);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.piano-logo-tagline {
+  margin: 0.3rem 0 0;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+}
+
+.piano-reveal-clear {
+  display: block;
+  margin: 1rem auto 0;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.piano-reveal-clear:hover {
+  color: var(--accent);
+}
+
 .hero-scroll-hint {
   position: absolute;
   bottom: 1.5rem;

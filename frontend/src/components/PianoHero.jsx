@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { usePianoTone } from '../hooks/usePianoTone'
+import { SoundWaveIcon } from './Icons'
 
 // Almost two octaves (C4-F5) -- enough keys that the wave reads as a full,
 // rich keyboard across the whole width of a wide screen rather than a
@@ -40,8 +41,13 @@ const REPLAY_GAP_MS = 420
 // reads as a "wave" rather than a flat keyboard -- purely decorative, t is
 // each key's position from 0 (left) to 1 (right).
 function waveTransform(t) {
-  const rotate = -16 + t * 32
-  const lift = -Math.sin(t * Math.PI * 0.85) * 60
+  // Rotation is deliberately modest: getBoundingClientRect() on a rotated
+  // element returns its axis-aligned bounding box, not its actual rotated
+  // footprint -- a click aimed at that box's center can land outside the
+  // key entirely (or on a neighboring key) once the angle gets large
+  // enough, verified by driving this with real click events.
+  const rotate = -6 + t * 24
+  const lift = -Math.sin(t * Math.PI * 0.9) * 65
   return `rotate(${rotate.toFixed(1)}deg) translateY(${lift.toFixed(1)}px)`
 }
 
@@ -55,6 +61,35 @@ export default function PianoHero() {
   const [playedNotes, setPlayedNotes] = useState([])
   const [isReplaying, setIsReplaying] = useState(false)
   const timeoutsRef = useRef([])
+  const whiteKeyRefs = useRef([])
+  // Pixel offsets (relative to .piano's left edge) for each black key,
+  // measured from the actual rendered white keys rather than computed via a
+  // hand-derived percentage formula -- a percentage-of-container approach
+  // doesn't account for .piano's own padding or the flex gaps between white
+  // keys, which put every black key visibly off from the boundary it's
+  // supposed to straddle (confirmed by screenshotting the result: the first
+  // black key covered nearly the entire first white key). offsetLeft/
+  // offsetWidth reflect the pre-transform layout box, so they're also
+  // unaffected by each key's own rotate/translateY.
+  const [blackKeyLefts, setBlackKeyLefts] = useState(() => BLACK_KEYS.map(() => 0))
+
+  useLayoutEffect(() => {
+    const measure = () => {
+      setBlackKeyLefts(
+        BLACK_KEYS.map((key) => {
+          const before = whiteKeyRefs.current[key.afterIndex]
+          const after = whiteKeyRefs.current[key.afterIndex + 1]
+          if (!before || !after) return 0
+          const boundary = before.offsetLeft + before.offsetWidth
+          const gapMidpoint = (boundary + after.offsetLeft) / 2
+          return gapMidpoint
+        })
+      )
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [])
 
   useEffect(() => () => timeoutsRef.current.forEach(clearTimeout), [])
 
@@ -83,6 +118,7 @@ export default function PianoHero() {
           return (
             <button
               key={key.note}
+              ref={(el) => { whiteKeyRefs.current[i] = el }}
               type="button"
               className="piano-key piano-key-white"
               style={{ transform: waveTransform(t) }}
@@ -91,15 +127,14 @@ export default function PianoHero() {
             />
           )
         })}
-        {BLACK_KEYS.map((key) => {
+        {BLACK_KEYS.map((key, i) => {
           const t = (key.afterIndex + 0.5) / (WHITE_KEYS.length - 1)
-          const left = ((key.afterIndex + 1) / WHITE_KEYS.length) * 100
           return (
             <button
               key={key.note}
               type="button"
               className="piano-key piano-key-black"
-              style={{ left: `${left}%`, transform: `translateX(-50%) ${waveTransform(t)}` }}
+              style={{ left: `${blackKeyLefts[i]}px`, transform: `translateX(-50%) ${waveTransform(t)}` }}
               aria-label={`Play ${key.note.replace('#', ' sharp ')}`}
               onClick={() => handlePlay(key)}
             />
@@ -108,11 +143,9 @@ export default function PianoHero() {
       </div>
 
       <div className="piano-preview" aria-live="polite">
-        {playedNotes.length > 0 && (
+        {playedNotes.length > 0 && playedNotes.length < MAX_PREVIEW_NOTES && (
           <>
-            <p className="piano-preview-label">
-              You played{playedNotes.length === MAX_PREVIEW_NOTES ? ` (last ${MAX_PREVIEW_NOTES})` : ''}:
-            </p>
+            <p className="piano-preview-label">You played:</p>
             <ol className="piano-preview-notes">
               {playedNotes.map((noteId, i) => (
                 <li key={i}>{NOTE_BY_ID[noteId].label}</li>
@@ -127,6 +160,24 @@ export default function PianoHero() {
               </button>
             </div>
           </>
+        )}
+
+        {playedNotes.length === MAX_PREVIEW_NOTES && (
+          <div className="piano-reveal">
+            <p className="piano-reveal-message">
+              You could see the keys and play them.
+              <br />
+              A blind musician can't — that's exactly why Sonara exists.
+            </p>
+            <div className="piano-logo">
+              <SoundWaveIcon className="piano-logo-icon" aria-hidden="true" />
+              <span className="piano-logo-word">sonara</span>
+            </div>
+            <p className="piano-logo-tagline">hear it . see it . feel it .</p>
+            <button type="button" className="piano-reveal-clear" onClick={handleClear}>
+              Clear
+            </button>
+          </div>
         )}
       </div>
 

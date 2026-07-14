@@ -2,6 +2,16 @@
  * glyphs. currentColor throughout so they inherit whatever text color the
  * surrounding button/heading is using. */
 
+export function SoundWaveIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" {...props}>
+      <circle cx="4.5" cy="12" r="1.9" fill="currentColor" stroke="none" />
+      <path d="M9.5 7.8a6 6 0 0 1 0 8.4" />
+      <path d="M13.5 4.3a11 11 0 0 1 0 15.4" />
+    </svg>
+  )
+}
+
 export function TranscribeIcon(props) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
