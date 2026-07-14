@@ -213,25 +213,28 @@ archive/     raw MusicNet download (audio, labels, MIDI, metadata) used to regen
 
 ## Deployment
 
-`render.yaml` at the repo root is a [Render Blueprint](https://render.com/docs/blueprint-spec) defining two services:
+**Primary: Railway.** Project `thriving-education`, two services, both connected directly to this GitHub repo (`avikakedia12/Sonara`, `main` branch, auto-deploys on push) rather than driven by a committed blueprint file:
 
-- `sonara-backend` — a Python **web service** (long-running, not serverless: basic-pitch's model load and audio transcription can take a minute or more, which would blow past a serverless function's execution limit) running `uvicorn api:app --app-dir scripts --host 0.0.0.0 --port $PORT`, deps from `requirements.txt` at the repo root.
-- `sonara-frontend` — a **static site** built from `frontend/` (`npm install && npm run build`, publishing `frontend/dist`), with SPA-style routing so any path falls back to `index.html`.
+- `sonara-backend` — root `/` (repo root), build `pip install --no-deps basic-pitch==0.4.0 && pip install -r requirements.txt`, start `uvicorn api:app --app-dir scripts --host 0.0.0.0 --port $PORT`.
+- `sonara-frontend` — root `frontend/` (Railway's "root directory" setting, which scopes *all* commands below to run with that as cwd), build `npm install && npm run build`, start `npx --yes serve -s dist -l $PORT` (`serve -s` gives the same SPA fallback-to-`index.html` routing Render's static site config provided).
 
-To deploy: push to GitHub, then in Render, "New" → "Blueprint" → point it at this repo. Render reads `render.yaml` and provisions both services.
+Env vars, same cross-referencing requirement as Render below: `sonara-backend`'s `FRONTEND_ORIGIN` and `sonara-frontend`'s `VITE_API_BASE` must match each other's actual deployed URL. Live at **https://sonara-frontend-production.up.railway.app** and **https://sonara-backend-production-1cd5.up.railway.app**.
 
-The two services need to know each other's URL:
+Two gotchas hit while setting this up, worth knowing if these services ever get recreated:
+- Railway's "root directory" setting actually does scope build/start command execution to that directory (unlike a naive first guess) — a build command with a redundant `cd frontend &&` prefix on top of `root: frontend` fails with `sh: cd: can't cd to frontend`, since the shell is already there.
+- `VITE_API_BASE` is baked into the frontend bundle at *build* time (it's a Vite env var, not read at runtime) — changing it and just restarting the service does nothing; it needs an actual rebuild (`railway redeploy --from-source`).
 
-- `sonara-backend`'s `FRONTEND_ORIGIN` env var must match the frontend's deployed URL (used for CORS — see `scripts/api.py`).
-- `sonara-frontend`'s `VITE_API_BASE` build-time env var must match the backend's deployed URL (see `frontend/src/api.js`).
+Config was set via `railway config pull`/`plan`/`apply` (a `.railway/railway.ts` file, Railway's declarative IaC format) rather than the dashboard UI — not committed to this repo, since it requires installing the `railway` npm package locally to run and isn't needed for normal deploys (Railway auto-deploys straight from GitHub pushes once services are configured).
+
+**Secondary/fallback: Render**, kept running via `render.yaml` at the repo root, a [Render Blueprint](https://render.com/docs/blueprint-spec) defining the same two services in the format Render expects. To deploy: push to GitHub, then in Render, "New" → "Blueprint" → point it at this repo.
 
 Live at: **https://sonara-frontend.onrender.com** (frontend) and **https://sonara-backend-frz0.onrender.com** (backend API — `sonara-backend` was already taken, so Render suffixed it). `render.yaml` hardcodes both of these into `FRONTEND_ORIGIN`/`VITE_API_BASE`; if either service is ever recreated under a different name, check the actual assigned URL with `render services --output json` and update both env vars (and this line) to match.
 
 Known gaps, not yet handled:
 - No rate limiting — every endpoint (including the ones that download audio from a `youtube_url`) is open to the public internet once deployed. Worth adding before real traffic.
-- `/describe`'s `speak=true` needs `pyttsx3` plus a working OS-level TTS backend (e.g. `espeak` on Linux) — deliberately not installed on the deployed backend (see `requirements.txt`), so `speak=true` will return a clean 422 there rather than working.
+- `/describe`'s `speak=true` needs `pyttsx3` plus a working OS-level TTS backend (e.g. `espeak` on Linux) — deliberately not installed on either deployed backend (see `requirements.txt`), so `speak=true` will return a clean 422 there rather than working.
 
-basic-pitch pulls in a TensorFlow/CoreML/ONNX/TFLite backend depending on platform; on Render's Linux containers (Python ≥3.11) this normally resolves to TensorFlow, which is both ABI-incompatible with numpy ≥2.0 (crashes every transcription at model-load time) and memory-hungry enough to OOM-crash the free/starter plan's instance under real inference load. `render.yaml`'s backend `buildCommand` avoids this by installing basic-pitch with `--no-deps` first, then `requirements.txt` (which pins `numpy<2.0` and installs `tflite-runtime`, a ~2MB purpose-built runtime, in place of the ~400MB+ TensorFlow) -- see the comments in both files for the full reasoning.
+basic-pitch pulls in a TensorFlow/CoreML/ONNX/TFLite backend depending on platform; on Linux containers (Python ≥3.11) this normally resolves to TensorFlow, which is both ABI-incompatible with numpy ≥2.0 (crashes every transcription at model-load time) and memory-hungry enough to OOM-crash a resource-constrained instance under real inference load. Both platforms' backend build commands avoid this by installing basic-pitch with `--no-deps` first, then `requirements.txt` (which pins `numpy<2.0` and installs `tflite-runtime`, a ~2MB purpose-built runtime, in place of the ~400MB+ TensorFlow) -- see the comments in `requirements.txt` and `render.yaml` for the full reasoning. Measured effect of the platform switch itself: the same transcription request that took Render's free/starter instance ~31s (warm) to ~166s (cold-start) completes on Railway in ~18s -- Railway's compute allocation for this workload is meaningfully better.
 
 ## Status
 
