@@ -6,12 +6,10 @@
 # serverless function's execution limit), and a static site for the Vite
 # frontend build.
 #
-# The two envVars below hardcode each other's expected onrender.com URL
-# rather than using Render's fromService cross-references, since that
-# behavior wasn't independently verifiable while writing this file. If
-# "sonara-backend" or "sonara-frontend" is already taken and Render assigns
-# a different hostname on first deploy, update FRONTEND_ORIGIN and
-# VITE_API_BASE below (or in the Render dashboard) to match, then redeploy.
+# The two envVars below hardcode each other's actual onrender.com URL.
+# "sonara-backend" was already taken, so Render assigned
+# sonara-backend-frz0.onrender.com instead -- confirmed via `render services`
+# and by checking what's actually baked into the deployed frontend bundle.
 #
 # The backend's Python version is pinned via a top-level .python-version
 # file (3.11), not a PYTHON_VERSION env var here -- the env var requires a
@@ -37,7 +35,7 @@ services:
     staticPublishPath: frontend/dist
     envVars:
       - key: VITE_API_BASE
-        value: https://sonara-backend.onrender.com
+        value: https://sonara-backend-frz0.onrender.com
       # Vite 8 requires Node ^20.19.0 || >=22.12.0 -- pinned explicitly since
       # Render's default Node version for static sites isn't guaranteed to
       # satisfy that.

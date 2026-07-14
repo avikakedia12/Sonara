@@ -225,7 +225,7 @@ The two services need to know each other's URL:
 - `sonara-backend`'s `FRONTEND_ORIGIN` env var must match the frontend's deployed URL (used for CORS — see `scripts/api.py`).
 - `sonara-frontend`'s `VITE_API_BASE` build-time env var must match the backend's deployed URL (see `frontend/src/api.js`).
 
-`render.yaml` hardcodes both as `https://sonara-<backend|frontend>.onrender.com`, which is what Render assigns if those service names are available. **If either name is already taken**, Render will suffix it (e.g. `sonara-backend-ab12`) — check the actual assigned URLs after first deploy and update both env vars (in the Render dashboard, or in `render.yaml` + redeploy) to match if they differ.
+Live at: **https://sonara-frontend.onrender.com** (frontend) and **https://sonara-backend-frz0.onrender.com** (backend API — `sonara-backend` was already taken, so Render suffixed it). `render.yaml` hardcodes both of these into `FRONTEND_ORIGIN`/`VITE_API_BASE`; if either service is ever recreated under a different name, check the actual assigned URL with `render services --output json` and update both env vars (and this line) to match.
 
 Known gaps, not yet handled:
 - No rate limiting — every endpoint (including the ones that download audio from a `youtube_url`) is open to the public internet once deployed. Worth adding before real traffic.
