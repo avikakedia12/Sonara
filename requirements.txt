@@ -6,8 +6,18 @@
 # existed for the interpreter version Render happened to use. Pinned,
 # modern versions have prebuilt wheels for any current CPython, so pip
 # fetches them directly instead of searching or compiling.
+#
+# numpy capped below 2.0: locally, basic-pitch runs on its CoreML backend
+# (coremltools is installed, and takes priority), which never touches
+# numpy 2.x-incompatible code, masking the real problem. Render's Linux
+# box has no CoreML (Apple-only) or tflite-runtime/onnxruntime, so
+# basic-pitch falls back to raw TensorFlow -- and tensorflow<2.15.1
+# (Sept 2023) predates numpy 2.0 (June 2024) and its compiled extensions
+# are ABI-incompatible with it, crashing every transcription with
+# "Unable to convert function return value to a Python type! The
+# signature was () -> handle" at model-load time.
 librosa==0.11.0
-numpy==2.4.6
+numpy<2.0
 music21==10.5.0
 basic-pitch==0.4.0
 mir_eval==0.8.2
