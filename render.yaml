@@ -22,7 +22,14 @@ services:
     name: sonara-backend
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt
+    # basic-pitch is installed first with --no-deps, deliberately skipping
+    # its normal (Linux + Python>=3.11) tensorflow<2.15.1 dependency --
+    # see requirements.txt's comment above tflite-runtime for why: that
+    # tensorflow pulls in a numpy-2.0-incompatible ABI and a 400MB+ runtime
+    # that blew past this plan's memory limit. requirements.txt then
+    # installs basic-pitch's other real dependencies (numpy, librosa, etc.)
+    # plus tflite-runtime as the lightweight inference backend instead.
+    buildCommand: pip install --no-deps basic-pitch==0.4.0 && pip install -r requirements.txt
     startCommand: uvicorn api:app --app-dir scripts --host 0.0.0.0 --port $PORT
     envVars:
       - key: FRONTEND_ORIGIN

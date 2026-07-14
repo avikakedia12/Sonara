@@ -230,7 +230,8 @@ Live at: **https://sonara-frontend.onrender.com** (frontend) and **https://sonar
 Known gaps, not yet handled:
 - No rate limiting — every endpoint (including the ones that download audio from a `youtube_url`) is open to the public internet once deployed. Worth adding before real traffic.
 - `/describe`'s `speak=true` needs `pyttsx3` plus a working OS-level TTS backend (e.g. `espeak` on Linux) — deliberately not installed on the deployed backend (see `requirements.txt`), so `speak=true` will return a clean 422 there rather than working.
-- basic-pitch pulls in a TensorFlow/CoreML/ONNX backend depending on platform; on Render's Linux containers this resolves to TensorFlow, which is memory-hungry. If the backend fails to build or crashes under load on Render's free tier, it likely needs a paid instance type with more RAM.
+
+basic-pitch pulls in a TensorFlow/CoreML/ONNX/TFLite backend depending on platform; on Render's Linux containers (Python ≥3.11) this normally resolves to TensorFlow, which is both ABI-incompatible with numpy ≥2.0 (crashes every transcription at model-load time) and memory-hungry enough to OOM-crash the free/starter plan's instance under real inference load. `render.yaml`'s backend `buildCommand` avoids this by installing basic-pitch with `--no-deps` first, then `requirements.txt` (which pins `numpy<2.0` and installs `tflite-runtime`, a ~2MB purpose-built runtime, in place of the ~400MB+ TensorFlow) -- see the comments in both files for the full reasoning.
 
 ## Status
 
