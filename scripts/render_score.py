@@ -18,6 +18,7 @@ SVG is reliable: it opens correctly in any browser (`open` on macOS) at
 whatever size the page actually is, no cropping, no color bugs.
 """
 import os
+import threading
 from pathlib import Path
 
 import verovio
@@ -31,6 +32,19 @@ import verovio
 # it explicitly on each instance via setResourcePath() (below) avoids that.
 _RESOURCE_PATH = os.path.join(os.path.dirname(verovio.__file__), "data")
 
+# Despite each request getting its own verovio.toolkit() instance, verovio's
+# underlying C++ engine caches font/glyph data in process-level global state,
+# not truly per-instance -- confirmed in production by two concurrent
+# /transcribe requests reliably segfaulting the whole uvicorn worker (no
+# Python traceback possible from a native crash, just an instant process
+# restart -- Railway logs showed "Started server process" firing again
+# within seconds of each crashed request, isolated to /transcribe and
+# /transpose specifically, the only two endpoints that call this function).
+# A process-wide lock serializes rendering across threads; cheap to do since
+# a render pass is ~0.1-0.3s versus the multi-second ML inference step that
+# doesn't touch verovio and stays fully concurrent.
+_VEROVIO_LOCK = threading.Lock()
+
 
 def render_to_svg_pages(musicxml_path: Path) -> list[str]:
     """Returns one SVG string per page of engraved notation.
@@ -42,8 +56,9 @@ def render_to_svg_pages(musicxml_path: Path) -> list[str]:
     warnings for durations outside its recognized set. --quantize (or Braille's
     --quantize) snaps notes to a clean rhythmic grid first, which is what
     actually produces readable sheet music, not this rendering step itself."""
-    tk = verovio.toolkit()
-    tk.setResourcePath(_RESOURCE_PATH)
-    if not tk.loadFile(str(musicxml_path)):
-        raise ValueError(f"verovio could not load {musicxml_path} as MusicXML")
-    return [tk.renderToSVG(page) for page in range(1, tk.getPageCount() + 1)]
+    with _VEROVIO_LOCK:
+        tk = verovio.toolkit()
+        tk.setResourcePath(_RESOURCE_PATH)
+        if not tk.loadFile(str(musicxml_path)):
+            raise ValueError(f"verovio could not load {musicxml_path} as MusicXML")
+        return [tk.renderToSVG(page) for page in range(1, tk.getPageCount() + 1)]
