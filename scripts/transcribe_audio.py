@@ -45,7 +45,7 @@ from render_score import render_to_svg_pages
 # clear of the 30s clips that are known-safe and well short of the 240s that
 # reliably crashed, without real measurements at the actual boundary (each
 # attempt takes down the shared production server for everyone using it).
-MAX_AUDIO_DURATION_SECONDS = 120
+MAX_AUDIO_DURATION_SECONDS = 300
 
 
 def estimate_beat_times(audio_path: Path) -> tuple[float, np.ndarray]:
