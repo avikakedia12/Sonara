@@ -37,15 +37,22 @@ from notation_utils import insert_with_ties, predict_notes_adaptive_chunked, qui
 from render_score import render_to_svg_pages
 
 # basic-pitch's tflite backend (Render/Railway's Linux deployment -- see
-# requirements.txt) segfaults the whole server process on long inputs -- see
-# notation_utils.SAFE_CHUNK_SECONDS and predict_notes_adaptive_chunked, which
-# transparently splits anything longer into chunks that stay under the
-# confirmed-safe boundary instead of feeding one long, crash-triggering input
-# to a single inference call. With that in place, this cap is no longer a
-# crash-avoidance limit -- it's a sanity/cost bound on total processing time
-# (each ~100s chunk is a full basic-pitch inference pass), generous enough to
-# cover essentially any real song.
-MAX_AUDIO_DURATION_SECONDS = 600
+# requirements.txt) segfaults the whole server process on long inputs.
+# notation_utils.predict_notes_adaptive_chunked splits anything longer than
+# SAFE_CHUNK_SECONDS (100s) into sequential chunks with explicit OS-level
+# memory release between them -- confirmed directly against production this
+# meaningfully raises the safe ceiling (a 150s file, needing 2 chunks, now
+# completes reliably where it crashed before any of this). It does NOT fully
+# solve the problem, though: a 240s file (3 chunks) still crashed the
+# container every single time it was tried, across three different
+# implementations (a plain in-process loop, per-chunk process isolation, and
+# this one) -- including crashing on the very *first* chunk when tried
+# immediately after a prior request, which points at genuine container-level
+# RAM pressure (this container's 1024MB) rather than a bug any of those
+# approaches could fix. 200s (2 chunks) is the honest, actually-confirmed
+# ceiling this settles on -- raising it further needs more server memory, not
+# more code.
+MAX_AUDIO_DURATION_SECONDS = 200
 
 
 def estimate_beat_times(audio_path: Path) -> tuple[float, np.ndarray]:
