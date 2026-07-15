@@ -11,9 +11,20 @@ audio-only stream as-is and handing that straight to the existing pipeline
 is both simpler and requires one fewer dependency than the usual
 yt-dlp-plus-ffmpeg setup.
 """
+import os
 from pathlib import Path
 
 import yt_dlp
+
+# bgutil-ytdlp-pot-provider sidecar (see scripts/api.py's neighboring Railway
+# service "bgutil-pot-provider") mints the PO token YouTube's web client now
+# requires. Without it, every player client eventually hits the "Sign in to
+# confirm you're not a bot" wall from Railway's datacenter IPs regardless of
+# client spoofing -- confirmed in production. With a valid token the web
+# client works normally, so there's no need to pin a workaround client.
+POT_PROVIDER_URL = os.environ.get(
+    "POT_PROVIDER_URL", "http://bgutil-pot-provider.railway.internal:4416"
+)
 
 
 def download_youtube_audio(url: str, out_dir: Path) -> Path:
@@ -32,19 +43,9 @@ def download_youtube_audio(url: str, out_dir: Path) -> Path:
         "noplaylist": True,
         # No postprocessors -- keep whatever container the audio-only stream
         # already comes in rather than re-encoding via ffmpeg.
-        #
-        # player_client=android: YouTube's default web-client extraction
-        # increasingly demands a PO token, which the Android client's API
-        # doesn't enforce, so this clears the bot-check from a residential
-        # IP. It does NOT clear it from Render's/Railway's datacenter IPs,
-        # confirmed in production -- YouTube blocklists those IP ranges
-        # directly regardless of player client, a problem client spoofing
-        # can't fix. Kept anyway since it's free and may still help for
-        # other failure modes; the actual fix for the deployed case is the
-        # clearer error message below, pointing users at the workaround
-        # that does reliably work (download the audio yourself, upload the
-        # file directly) instead of yt-dlp's cookie-export wall of text.
-        "extractor_args": {"youtube": {"player_client": ["android"]}},
+        "extractor_args": {
+            "youtubepot-bgutilhttp": {"base_url": [POT_PROVIDER_URL]},
+        },
     }
 
     try:
