@@ -32,6 +32,14 @@ def download_youtube_audio(url: str, out_dir: Path) -> Path:
         "noplaylist": True,
         # No postprocessors -- keep whatever container the audio-only stream
         # already comes in rather than re-encoding via ffmpeg.
+        #
+        # player_client=android: YouTube's default web-client extraction
+        # increasingly demands a PO token and blocks server/datacenter IPs
+        # outright ("Sign in to confirm you're not a bot" -- hit in
+        # production on both Render and Railway, unrelated to any cookies
+        # or account). The Android client's API doesn't enforce that check,
+        # and still exposes the same audio-only formats.
+        "extractor_args": {"youtube": {"player_client": ["android"]}},
     }
 
     try:
