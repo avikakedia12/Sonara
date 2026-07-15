@@ -90,6 +90,23 @@ export function DownloadIcon(props) {
   )
 }
 
+export function LayersIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="m12 3 9 5-9 5-9-5 9-5Z" />
+      <path d="m3 13 9 5 9-5" />
+    </svg>
+  )
+}
+
+export function PulseIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M3 12h4l2-7 4 14 2-7h6" />
+    </svg>
+  )
+}
+
 export function Spinner(props) {
   return (
     <svg className="spinner" viewBox="0 0 24 24" fill="none" {...props}>

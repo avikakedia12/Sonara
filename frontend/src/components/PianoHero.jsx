@@ -41,11 +41,11 @@ const NOTE_BY_ID = Object.fromEntries([...WHITE_KEYS, ...BLACK_KEYS].map((k) => 
 const MAX_PREVIEW_NOTES = 5
 const REPLAY_GAP_MS = 420
 
-/** Decorative interactive piano banner shown above the tool tabs -- not a
- * tab itself, just something to scroll past on the way to the actual
- * pipeline. No visible copy by design; the piano keyboard's own
- * aria-label/per-key aria-labels are what a screen reader picks up, so it
- * stays discoverable without a paragraph of on-page text. */
+/** Decorative interactive piano banner filling the landing hero, behind the
+ * logo/tagline -- playing through a few notes reveals a "try the tool" CTA.
+ * No visible copy by default; the piano keyboard's own aria-label/per-key
+ * aria-labels are what a screen reader picks up, so it stays discoverable
+ * without a paragraph of on-page text. */
 export default function PianoHero() {
   const playNote = usePianoTone()
   const [playedNotes, setPlayedNotes] = useState([])
@@ -121,7 +121,7 @@ export default function PianoHero() {
             <button
               key={key.note}
               type="button"
-              className="absolute top-0 z-10 h-[60%] w-[6.5%] max-w-9 -translate-x-1/2 cursor-pointer rounded-b-md bg-[#18161d] shadow-[0_3px_6px_rgba(0,0,0,0.45)] transition-[filter] duration-150 ease-out hover:brightness-125 focus:z-20 focus:brightness-125 focus:outline-[3px] focus:outline-offset-1 focus:outline-brand"
+              className="absolute top-0 z-10 h-[60%] w-[6.5%] max-w-9 -translate-x-1/2 cursor-pointer rounded-b-md bg-gradient-to-b from-[#2b1152] via-[#1a0f36] to-[#0f0a20] shadow-[0_3px_10px_rgba(134,59,255,0.4)] transition-[filter,box-shadow] duration-150 ease-out hover:shadow-[0_3px_14px_rgba(71,191,255,0.55)] hover:brightness-125 focus:z-20 focus:shadow-[0_3px_14px_rgba(71,191,255,0.55)] focus:brightness-125 focus:outline-[3px] focus:outline-offset-1 focus:outline-brand"
               style={{ left }}
               aria-label={`Play ${key.note.replace('#', ' sharp ')}`}
               onClick={() => handlePlay(key)}
@@ -169,18 +169,22 @@ export default function PianoHero() {
               <br />
               A blind musician can't — that's exactly why Sonara exists.
             </p>
-            <div className="inline-flex items-center gap-2">
-              <SoundWaveIcon className="size-[1.8rem] shrink-0 text-[#8b5cf6]" aria-hidden="true" />
-              <span className="bg-gradient-to-r from-[#7c3aed] to-[#f97316] bg-clip-text text-[2rem] font-extrabold tracking-tight text-transparent">sonara</span>
+            <div className="flex flex-wrap items-center justify-center gap-2.5">
+              <a
+                href="#/app"
+                className="inline-flex items-center gap-1.5 rounded-(--radius-s) bg-gradient-to-r from-[#863bff] to-[#47bfff] px-[1.1rem] py-2 text-[0.85rem] font-bold text-white shadow-[0_2px_12px_rgba(134,59,255,0.4)] transition-transform hover:-translate-y-px"
+              >
+                Try the tool
+                <SoundWaveIcon className="size-[1rem] shrink-0" aria-hidden="true" />
+              </a>
+              <button
+                type="button"
+                onClick={handleClear}
+                className="cursor-pointer border-none bg-transparent px-2 py-2 text-[0.8rem] font-semibold text-dim underline underline-offset-2 hover:text-brand"
+              >
+                Clear
+              </button>
             </div>
-            <p className="mt-1 mb-0 text-[0.85rem] tracking-wide text-dim">hear it . see it . feel it .</p>
-            <button
-              type="button"
-              onClick={handleClear}
-              className="mx-auto mt-4 block cursor-pointer border-none bg-transparent text-[0.8rem] font-semibold text-dim underline underline-offset-2 hover:text-brand"
-            >
-              Clear
-            </button>
           </div>
         )}
       </div>
@@ -190,7 +194,7 @@ export default function PianoHero() {
           className="absolute bottom-6 left-1/2 z-30 flex -translate-x-1/2 animate-bob flex-col items-center gap-0.5 text-xs font-semibold tracking-wider text-dim uppercase"
           aria-hidden="true"
         >
-          <span>Scroll for the tools</span>
+          <span>Scroll to explore</span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-[1.1rem]">
             <path d="M6 9l6 6 6-6" />
           </svg>
