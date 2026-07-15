@@ -33,9 +33,21 @@ to work from Railway at all:
   unavailable but android/tv/web/mweb extract it fine. Passing an explicit
   list makes yt-dlp try all of them rather than stopping at the first
   definitive-looking failure.
+
+Even with all three of the above in place, "Sign in to confirm you're not a
+bot" still shows up intermittently -- confirmed on production by watching
+the same video flip from failing on every request for ~40 minutes straight
+to succeeding on every request right after a redeploy (same code, same
+config), which points to the shared residential proxy's *current* exit IP
+occasionally being already flagged by YouTube rather than anything wrong
+with the request itself. RETRY_ATTEMPTS re-runs the whole extraction
+(fresh yt-dlp session -> fresh proxy connection -> usually a different exit
+IP) a couple times before giving up, since a bad exit IP for one request
+isn't necessarily bad for the next.
 """
 import os
 import shutil
+import time
 from pathlib import Path
 
 import yt_dlp
@@ -46,6 +58,8 @@ POT_PROVIDER_URL = os.environ.get(
 YT_PROXY_URL = os.environ.get("YT_PROXY_URL")
 PLAYER_CLIENTS = ["android", "tv", "web", "mweb"]
 HAS_FFMPEG = shutil.which("ffmpeg") is not None
+RETRY_ATTEMPTS = 3
+RETRY_DELAY_SECONDS = 3
 
 
 def download_youtube_audio(url: str, out_dir: Path) -> Path:
@@ -62,6 +76,7 @@ def download_youtube_audio(url: str, out_dir: Path) -> Path:
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
+        "verbose": os.environ.get("YT_DEBUG") == "1",
         "extractor_args": {
             "youtube": {"player_client": PLAYER_CLIENTS},
             "youtubepot-bgutilhttp": {"base_url": [POT_PROVIDER_URL]},
@@ -74,13 +89,24 @@ def download_youtube_audio(url: str, out_dir: Path) -> Path:
             {"key": "FFmpegExtractAudio", "preferredcodec": "m4a"}
         ]
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            path = Path(ydl.prepare_filename(info))
-            if HAS_FFMPEG:
-                path = path.with_suffix(".m4a")
-    except yt_dlp.utils.DownloadError as exc:
+    path = None
+    last_exc = None
+    for attempt in range(1, RETRY_ATTEMPTS + 1):
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                path = Path(ydl.prepare_filename(info))
+                if HAS_FFMPEG:
+                    path = path.with_suffix(".m4a")
+            break
+        except yt_dlp.utils.DownloadError as exc:
+            last_exc = exc
+            if "Sign in to confirm" not in str(exc) or attempt == RETRY_ATTEMPTS:
+                break
+            time.sleep(RETRY_DELAY_SECONDS)
+
+    if path is None:
+        exc = last_exc
         if "Sign in to confirm" in str(exc):
             raise RuntimeError(
                 "YouTube is blocking downloads from this server (not specific to this video or "

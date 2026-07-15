@@ -38,6 +38,43 @@ def test_download_youtube_audio_raises_clear_error_on_failure(tmp_path):
             download_youtube_audio("https://youtube.com/watch?v=deadbeef", tmp_path)
 
 
+def test_download_youtube_audio_retries_on_bot_check_then_succeeds(tmp_path, monkeypatch):
+    downloaded_path = tmp_path / "abc123.m4a"
+    downloaded_path.write_bytes(b"fake audio bytes")
+
+    fake_ydl = MagicMock()
+    fake_ydl.__enter__.return_value = fake_ydl
+    fake_ydl.__exit__.return_value = False
+    fake_ydl.extract_info.side_effect = [
+        yt_dlp.utils.DownloadError("Sign in to confirm you're not a bot"),
+        {"id": "abc123", "ext": "m4a"},
+    ]
+    fake_ydl.prepare_filename.return_value = str(downloaded_path)
+
+    monkeypatch.setattr("youtube_input.time.sleep", lambda *_: None)
+    with patch("yt_dlp.YoutubeDL", return_value=fake_ydl):
+        result = download_youtube_audio("https://youtube.com/watch?v=abc123", tmp_path)
+
+    assert result == downloaded_path
+    assert fake_ydl.extract_info.call_count == 2
+
+
+def test_download_youtube_audio_gives_up_after_retries_exhausted(tmp_path, monkeypatch):
+    fake_ydl = MagicMock()
+    fake_ydl.__enter__.return_value = fake_ydl
+    fake_ydl.__exit__.return_value = False
+    fake_ydl.extract_info.side_effect = yt_dlp.utils.DownloadError(
+        "Sign in to confirm you're not a bot"
+    )
+
+    monkeypatch.setattr("youtube_input.time.sleep", lambda *_: None)
+    with patch("yt_dlp.YoutubeDL", return_value=fake_ydl):
+        with pytest.raises(RuntimeError, match="blocking downloads from this server"):
+            download_youtube_audio("https://youtube.com/watch?v=deadbeef", tmp_path)
+
+    assert fake_ydl.extract_info.call_count == 3
+
+
 def test_download_youtube_audio_raises_if_file_missing(tmp_path):
     fake_ydl = MagicMock()
     fake_ydl.__enter__.return_value = fake_ydl
