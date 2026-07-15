@@ -51,7 +51,7 @@ export default function LandingPage() {
         </p>
 
         <div className="relative z-20 flex flex-col items-center pt-[9vh] text-center">
-          <img src="/favicon.svg" alt="" aria-hidden="true" className="size-16 drop-shadow-[0_0_18px_rgba(134,59,255,0.55)]" />
+          <SoundWaveIcon aria-hidden="true" className="size-16 text-brand drop-shadow-[0_0_18px_rgba(134,59,255,0.55)]" strokeWidth="1.5" />
           <h1 className="mt-4 mb-0 bg-gradient-to-r from-[#863bff] to-[#47bfff] bg-clip-text text-[3.2rem] leading-none font-extrabold tracking-tight text-transparent">
             sonara
           </h1>
