@@ -7,10 +7,14 @@ export default function SheetMusic({ pages }) {
   if (!pages || pages.length === 0) return null
 
   return (
-    <div className="sheet-music">
+    <div className="mt-6 flex flex-col gap-5">
       {pages.map((svg, i) => (
         // eslint-disable-next-line react/no-danger
-        <div key={i} className="sheet-music-page" dangerouslySetInnerHTML={{ __html: svg }} />
+        <div
+          key={i}
+          className="overflow-x-auto rounded-(--radius-m) border border-border bg-white p-5 shadow-(--shadow-s) [&_svg]:block [&_svg]:h-auto [&_svg]:w-full"
+          dangerouslySetInnerHTML={{ __html: svg }}
+        />
       ))}
     </div>
   )

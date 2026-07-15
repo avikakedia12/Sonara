@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { cn } from '@/lib/utils'
 import { UploadIcon } from './Icons'
 
 /** A styled file input that also accepts drag-and-drop, instead of the
@@ -18,7 +19,10 @@ export default function FileDrop({ file, onChange, accept, label }) {
 
   return (
     <div
-      className={dragOver ? 'file-drop drag-over' : 'file-drop'}
+      className={cn(
+        'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-(--radius-m) border-[1.5px] border-dashed border-border-strong bg-surface px-4 py-7 text-center transition-colors',
+        dragOver ? 'border-brand bg-brand-wash' : 'hover:border-brand hover:bg-brand-wash focus-visible:border-brand focus-visible:bg-brand-wash focus-visible:outline-none'
+      )}
       onClick={() => inputRef.current?.click()}
       onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
       onDragLeave={() => setDragOver(false)}
@@ -27,14 +31,14 @@ export default function FileDrop({ file, onChange, accept, label }) {
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click() }}
     >
-      <UploadIcon className="file-drop-icon" />
-      <div className="file-drop-text">
+      <UploadIcon className="size-[1.6rem] text-dim" />
+      <div className="flex flex-col gap-0.5 text-[0.9rem] font-medium text-foreground normal-case tracking-normal">
         {file ? (
-          <span className="file-drop-filename">{file.name}</span>
+          <span className="font-semibold text-heading break-all">{file.name}</span>
         ) : (
           <>
             <strong>{label}</strong>
-            <span className="file-drop-hint">click to browse, or drag a file here</span>
+            <span className="text-[0.8rem] font-normal text-dim">click to browse, or drag a file here</span>
           </>
         )}
       </div>

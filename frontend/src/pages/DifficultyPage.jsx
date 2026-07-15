@@ -5,6 +5,9 @@ import { useRotatingMessage } from '../hooks/useRotatingMessage'
 import AudioSourceInput from '../components/AudioSourceInput'
 import EmptyState from '../components/EmptyState'
 import { Spinner } from '../components/Icons'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
 
 const LOADING_MESSAGES = [
   'Reading the score…',
@@ -26,14 +29,12 @@ function FactorMeter({ name, score, detail }) {
   const label = FACTOR_LABELS[name] || name
   return (
     <div>
-      <div className="difficulty-factor-row">
-        <span className="difficulty-factor-label">{label}</span>
-        <span className="difficulty-factor-track" role="presentation">
-          <span className="difficulty-factor-fill" style={{ width: `${(score / 10) * 100}%` }} />
-        </span>
-        <span className="difficulty-factor-value">{score.toFixed(1)}/10</span>
+      <div className="flex items-center gap-3">
+        <span className="w-[8.5rem] shrink-0 text-[0.78rem] font-semibold text-dim uppercase tracking-wide">{label}</span>
+        <Progress value={(score / 10) * 100} className="h-[0.4rem] flex-1 bg-border [&>div]:bg-brand" />
+        <span className="w-[2.6rem] shrink-0 text-right text-[0.82rem] font-bold text-foreground tabular-nums">{score.toFixed(1)}/10</span>
       </div>
-      <p className="difficulty-factor-detail">{detail}</p>
+      <p className="mt-0.5 ml-[9.25rem] text-[0.8rem] text-dim">{detail}</p>
     </div>
   )
 }
@@ -52,51 +53,52 @@ export default function DifficultyPage() {
   }
 
   return (
-    <section>
-      <h2>Difficulty</h2>
-      <p className="page-blurb">
+    <section className="animate-fade-in">
+      <h2 className="text-2xl">Difficulty</h2>
+      <p className="mb-7 max-w-[60ch] leading-relaxed text-dim">
         Score (MusicXML/MIDI) or audio &rarr; an estimated performance difficulty per part, with
         the exact numbers behind the rating -- fastest note value, pitch range, average melodic
         leap, chord density, key signature, and notes-per-second at the marked tempo. A
         deterministic, rule-based heuristic, not a certified grade level.
       </p>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} className="flex max-w-[480px] flex-col gap-[1.15rem]">
         <AudioSourceInput source={source} onChange={setSource} label="Drop a score or audio file" />
-        <button type="submit" disabled={loading || !hasSource}>
+        <Button type="submit" disabled={loading || !hasSource} size="lg"
+          className="h-auto self-start rounded-(--radius-s) px-5 py-2.5 text-[0.95rem] font-bold shadow-(--shadow-s) hover:-translate-y-px hover:shadow-(--shadow-m)">
           {loading && <Spinner />}
           {loading ? 'Analyzing…' : 'Rate difficulty'}
-        </button>
-        {loading && <p className="loading-message">{loadingMessage}</p>}
+        </Button>
+        {loading && <p className="-mt-1.5 text-[0.85rem] text-dim animate-fade-in">{loadingMessage}</p>}
       </form>
 
-      {error && <p className="error">Error: {error}</p>}
+      {error && <p className="mt-5 rounded-(--radius-s) border-l-[3px] border-error bg-error-wash px-4.5 py-3.5 text-[0.9rem] whitespace-pre-wrap text-error">Error: {error}</p>}
 
       {!error && !result && !loading && (
         <EmptyState icon="🎚️" text="Upload a score or audio file (or paste a YouTube link) to estimate how hard it is to play." />
       )}
 
       {result && (
-        <div className="result">
-          {result.accuracy_note && <p className="accuracy-note">{result.accuracy_note}</p>}
+        <div className="mt-8 border-t border-border pt-7">
+          {result.accuracy_note && <p className="mb-5 border-l-[3px] border-border-strong pl-3 text-[0.85rem] text-dim italic">{result.accuracy_note}</p>}
 
-          <div className="difficulty-headline">
-            <div className="difficulty-score-value">
+          <div className="mb-6 flex flex-wrap items-baseline gap-4">
+            <div className="text-5xl leading-none font-bold text-heading">
               {result.overall_score.toFixed(1)}
-              <small>/10</small>
+              <small className="text-[1.1rem] font-semibold text-dim">/10</small>
             </div>
-            <span className="difficulty-level-badge">{result.overall_level}</span>
+            <Badge className="rounded-full bg-brand-wash px-3.5 py-1.5 text-[0.95rem] font-bold text-brand">{result.overall_level}</Badge>
           </div>
 
-          <p className="description-text">{result.summary}</p>
+          <p className="mb-6 rounded-(--radius-m) border border-border bg-surface px-5.5 py-4.5 leading-relaxed">{result.summary}</p>
 
-          <div className="difficulty-parts">
+          <div className="flex flex-col gap-5">
             {result.per_part.map((part) => (
-              <div className="difficulty-part" key={part.name}>
-                <div className="difficulty-part-header">
-                  <h4>{part.name}</h4>
-                  <span className="difficulty-part-score">{part.level} &middot; {part.score.toFixed(1)}/10</span>
+              <div className="rounded-(--radius-m) border border-border bg-surface px-5.5 py-[1.1rem] pb-[1.35rem]" key={part.name}>
+                <div className="mb-3.5 flex items-center justify-between gap-3">
+                  <h4 className="m-0 text-base">{part.name}</h4>
+                  <span className="text-[0.9rem] font-bold text-brand">{part.level} &middot; {part.score.toFixed(1)}/10</span>
                 </div>
-                <div className="difficulty-factors">
+                <div className="flex flex-col gap-3">
                   {Object.entries(part.factors).map(([name, factor]) => (
                     <FactorMeter key={name} name={name} score={factor.score} detail={factor.detail} />
                   ))}

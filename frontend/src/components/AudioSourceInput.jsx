@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { cn } from '@/lib/utils'
+import { Input } from '@/components/ui/input'
 import FileDrop from './FileDrop'
 
 /** Toggle between "upload a file" and "paste a YouTube URL" -- the two
@@ -13,13 +15,16 @@ export default function AudioSourceInput({ source, onChange, accept, label }) {
   }
 
   return (
-    <div className="audio-source">
-      <div className="source-toggle" role="tablist">
+    <div className="flex flex-col gap-2.5">
+      <div className="inline-flex w-fit gap-0.5 self-start rounded-full border border-border bg-bg-canvas p-0.5" role="tablist">
         <button
           type="button"
           role="tab"
           aria-selected={mode === 'file'}
-          className={mode === 'file' ? 'source-toggle-btn active' : 'source-toggle-btn'}
+          className={cn(
+            'rounded-full px-3.5 py-1.5 text-[0.8rem] font-semibold text-dim transition-colors',
+            mode === 'file' && 'bg-surface text-brand shadow-(--shadow-s)'
+          )}
           onClick={() => setMode_('file')}
         >
           Upload file
@@ -28,7 +33,10 @@ export default function AudioSourceInput({ source, onChange, accept, label }) {
           type="button"
           role="tab"
           aria-selected={mode === 'youtube'}
-          className={mode === 'youtube' ? 'source-toggle-btn active' : 'source-toggle-btn'}
+          className={cn(
+            'rounded-full px-3.5 py-1.5 text-[0.8rem] font-semibold text-dim transition-colors',
+            mode === 'youtube' && 'bg-surface text-brand shadow-(--shadow-s)'
+          )}
           onClick={() => setMode_('youtube')}
         >
           YouTube URL
@@ -43,9 +51,9 @@ export default function AudioSourceInput({ source, onChange, accept, label }) {
           label={label}
         />
       ) : (
-        <input
+        <Input
           type="url"
-          className="youtube-url-input"
+          className="h-auto rounded-(--radius-m) border-[1.5px] border-border-strong px-4 py-3.5 text-[0.95rem] focus-visible:border-brand focus-visible:ring-brand-wash"
           placeholder="https://www.youtube.com/watch?v=…"
           value={source.youtubeUrl || ''}
           onChange={(e) => onChange({ youtubeUrl: e.target.value })}

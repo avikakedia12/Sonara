@@ -5,6 +5,10 @@ import { useRotatingMessage } from '../hooks/useRotatingMessage'
 import AudioSourceInput from '../components/AudioSourceInput'
 import EmptyState from '../components/EmptyState'
 import { Spinner } from '../components/Icons'
+import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 const LOADING_MESSAGES = [
   'Reading the score…',
@@ -32,46 +36,57 @@ export default function DescribePage() {
     : null
 
   return (
-    <section>
-      <h2>Describe</h2>
-      <p className="page-blurb">
+    <section className="animate-fade-in">
+      <h2 className="text-2xl">Describe</h2>
+      <p className="mb-7 max-w-[60ch] leading-relaxed text-dim">
         Score (MusicXML/MIDI) or audio &rarr; a plain-text structural description (title, key,
         tempo, instrumentation, length) -- meant to orient a blind musician before reading the
         piece note-by-note. Optionally spoken aloud.
       </p>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} className="flex max-w-[480px] flex-col gap-[1.15rem]">
         <AudioSourceInput source={source} onChange={setSource} label="Drop a score or audio file" />
-        <label>
-          Detail level
-          <select value={level} onChange={(e) => setLevel(e.target.value)}>
-            <option value="brief">Brief</option>
-            <option value="standard">Standard</option>
-            <option value="detailed">Detailed</option>
-          </select>
-        </label>
-        <label className="checkbox-label">
-          <input type="checkbox" checked={speak} onChange={(e) => setSpeak(e.target.checked)} />
-          Also render as speech (requires pyttsx3 installed server-side)
-        </label>
-        <button type="submit" disabled={loading || !hasSource}>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="level" className="text-[0.82rem] font-semibold text-dim uppercase tracking-wide">
+            Detail level
+          </Label>
+          <Select value={level} onValueChange={setLevel}>
+            <SelectTrigger id="level" className="h-auto w-full rounded-(--radius-s) border-border-strong px-3 py-2.5 focus-visible:border-brand focus-visible:ring-brand-wash">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="brief">Brief</SelectItem>
+              <SelectItem value="standard">Standard</SelectItem>
+              <SelectItem value="detailed">Detailed</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-2.5">
+          <Checkbox id="speak" checked={speak} onCheckedChange={(v) => setSpeak(Boolean(v))}
+            className="data-checked:border-brand data-checked:bg-brand" />
+          <Label htmlFor="speak" className="text-[0.92rem] font-normal text-foreground normal-case">
+            Also render as speech (requires pyttsx3 installed server-side)
+          </Label>
+        </div>
+        <Button type="submit" disabled={loading || !hasSource} size="lg"
+          className="h-auto self-start rounded-(--radius-s) px-5 py-2.5 text-[0.95rem] font-bold shadow-(--shadow-s) hover:-translate-y-px hover:shadow-(--shadow-m)">
           {loading && <Spinner />}
           {loading ? 'Describing…' : 'Describe'}
-        </button>
-        {loading && <p className="loading-message">{loadingMessage}</p>}
+        </Button>
+        {loading && <p className="-mt-1.5 text-[0.85rem] text-dim animate-fade-in">{loadingMessage}</p>}
       </form>
 
-      {error && <p className="error">Error: {error}</p>}
+      {error && <p className="mt-5 rounded-(--radius-s) border-l-[3px] border-error bg-error-wash px-4.5 py-3.5 text-[0.9rem] whitespace-pre-wrap text-error">Error: {error}</p>}
 
       {!error && !result && !loading && (
         <EmptyState icon="📝" text="Upload a score or audio file (or paste a YouTube link) to get a structural description." />
       )}
 
       {result && (
-        <div className="result">
-          {result.accuracy_note && <p className="accuracy-note">{result.accuracy_note}</p>}
-          <p className="description-text">{result.description}</p>
+        <div className="mt-8 border-t border-border pt-7">
+          {result.accuracy_note && <p className="mb-5 border-l-[3px] border-border-strong pl-3 text-[0.85rem] text-dim italic">{result.accuracy_note}</p>}
+          <p className="rounded-(--radius-m) border border-border bg-surface px-5.5 py-4.5 leading-relaxed">{result.description}</p>
           {audioSrc && (
-            <audio controls src={audioSrc} style={{ width: '100%', marginTop: '1.25rem' }}>
+            <audio controls src={audioSrc} className="mt-5 w-full">
               Your browser doesn't support inline audio playback.
             </audio>
           )}

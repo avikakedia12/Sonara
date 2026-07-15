@@ -1,5 +1,16 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* Dark mode follows the OS preference automatically, same as before this
+ * restyle -- there's no in-app toggle, so `dark:` utilities (both Tailwind's
+ * and shadcn components' own) are wired to the media query rather than
+ * shadcn's default `.dark`-class convention, which would need JS to ever
+ * activate. */
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
 :root {
-  /* Color */
+  /* ---------- Base palette ---------- */
   --text: #4b4653;
   --text-h: #17141f;
   --text-dim: #85808f;
@@ -8,14 +19,22 @@
   --surface: #ffffff;
   --border: #e6e3e8;
   --border-strong: #d6d2da;
-  --accent: #6d28d9;
-  --accent-hover: #5b21b6;
-  --accent-bg: rgba(109, 40, 217, 0.08);
-  --accent-contrast: #ffffff;
   --error: #b91c1c;
-  --error-bg: rgba(185, 28, 28, 0.07);
+  --error-wash: rgba(185, 28, 28, 0.07);
 
-  /* Scale */
+  /* Per-feature brand color -- the whole page's identity shifts to match
+   * whichever tool tab is active (see the [data-tab] overrides below), so
+   * each tool has its own hue while sharing one cohesive system. Named
+   * "brand", not "accent", specifically so it doesn't collide with shadcn's
+   * own --accent/--accent-foreground convention below, which means a subtle
+   * neutral hover highlight, not a primary/CTA color -- two different
+   * concepts that happen to share a common name in shadcn's defaults. */
+  --brand: #6d28d9;
+  --brand-hover: #5b21b6;
+  --brand-wash: rgba(109, 40, 217, 0.08);
+  --brand-contrast: #ffffff;
+
+  /* ---------- Scale ---------- */
   --radius-s: 8px;
   --radius-m: 12px;
   --radius-l: 18px;
@@ -33,7 +52,39 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+
+  /* ---------- shadcn's expected tokens, mapped onto the palette above ---------- */
+  --background: var(--bg-canvas);
+  --foreground: var(--text);
+  --card: var(--bg);
+  --card-foreground: var(--text-h);
+  --popover: var(--surface);
+  --popover-foreground: var(--text-h);
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-contrast);
+  --secondary: var(--bg-canvas);
+  --secondary-foreground: var(--text);
+  --muted: var(--bg-canvas);
+  --muted-foreground: var(--text-dim);
+  /* shadcn's own --accent: a subtle neutral highlight (menu-item hover, etc.),
+   * not the brand color -- tinted with the brand wash to stay cohesive with
+   * how tab hovers already worked (a soft per-tab-colored tint), rather than
+   * shadcn's default flat gray. */
+  --accent: var(--brand-wash);
+  --accent-foreground: var(--brand);
+  --destructive: var(--error);
+  --border: var(--border);
+  --input: var(--border-strong);
+  --ring: var(--brand);
+  --radius: 0.75rem;
 }
+
+/* Per-feature accent theming -- see the --brand comment above. */
+[data-tab='transcribe'] { --brand: #6d28d9; --brand-hover: #5b21b6; --brand-wash: rgba(109, 40, 217, 0.08); }
+[data-tab='braille']    { --brand: #0f766e; --brand-hover: #0d9488; --brand-wash: rgba(15, 118, 110, 0.08); }
+[data-tab='transpose']  { --brand: #b45309; --brand-hover: #92400e; --brand-wash: rgba(180, 83, 9, 0.08); }
+[data-tab='describe']   { --brand: #be185d; --brand-hover: #9d174d; --brand-wash: rgba(190, 24, 93, 0.08); }
+[data-tab='difficulty'] { --brand: #1d4ed8; --brand-hover: #1e40af; --brand-wash: rgba(29, 78, 216, 0.08); }
 
 @media (prefers-color-scheme: dark) {
   :root {
@@ -45,13 +96,15 @@
     --surface: #1a1820;
     --border: #2c2934;
     --border-strong: #38343f;
-    --accent: #a78bfa;
-    --accent-hover: #c4b5fd;
-    --accent-bg: rgba(167, 139, 250, 0.12);
-    --accent-contrast: #17141f;
     --error: #f87171;
-    --error-bg: rgba(248, 113, 113, 0.1);
+    --error-wash: rgba(248, 113, 113, 0.1);
   }
+
+  [data-tab='transcribe'] { --brand: #a78bfa; --brand-hover: #c4b5fd; --brand-wash: rgba(167, 139, 250, 0.14); --brand-contrast: #17141f; }
+  [data-tab='braille']    { --brand: #2dd4bf; --brand-hover: #5eead4; --brand-wash: rgba(45, 212, 191, 0.14); --brand-contrast: #17141f; }
+  [data-tab='transpose']  { --brand: #fbbf24; --brand-hover: #fcd34d; --brand-wash: rgba(251, 191, 36, 0.14); --brand-contrast: #17141f; }
+  [data-tab='describe']   { --brand: #f472b6; --brand-hover: #f9a8d4; --brand-wash: rgba(244, 114, 182, 0.14); --brand-contrast: #17141f; }
+  [data-tab='difficulty'] { --brand: #60a5fa; --brand-hover: #93c5fd; --brand-wash: rgba(96, 165, 250, 0.14); --brand-contrast: #17141f; }
 }
 
 * {
@@ -73,6 +126,75 @@ code, pre {
 }
 
 ::selection {
-  background: var(--accent-bg);
-  color: var(--accent);
+  background: var(--brand-wash);
+  color: var(--brand);
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes bob {
+  0%, 100% { transform: translate(-50%, 0); }
+  50% { transform: translate(-50%, 6px); }
+}
+
+@theme inline {
+  --font-sans: var(--sans);
+  --font-serif: var(--serif);
+  --font-mono: var(--mono);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* App-specific tokens, exposed as Tailwind utilities (bg-brand, text-dim,
+   * bg-surface, etc.) for the pages/components using them directly. */
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-wash: var(--brand-wash);
+  --color-brand-contrast: var(--brand-contrast);
+  --color-surface: var(--surface);
+  --color-heading: var(--text-h);
+  --color-dim: var(--text-dim);
+  --color-error: var(--error);
+  --color-error-wash: var(--error-wash);
+
+  --radius-sm: var(--radius-s);
+  --radius-md: var(--radius-m);
+  --radius-lg: var(--radius-l);
+
+  --shadow-s: var(--shadow-s);
+  --shadow-m: var(--shadow-m);
+
+  --animate-fade-in: fade-in 0.2s ease-out;
+  --animate-bob: bob 2s ease-in-out infinite;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
 }
