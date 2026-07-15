@@ -34,11 +34,16 @@ def download_youtube_audio(url: str, out_dir: Path) -> Path:
         # already comes in rather than re-encoding via ffmpeg.
         #
         # player_client=android: YouTube's default web-client extraction
-        # increasingly demands a PO token and blocks server/datacenter IPs
-        # outright ("Sign in to confirm you're not a bot" -- hit in
-        # production on both Render and Railway, unrelated to any cookies
-        # or account). The Android client's API doesn't enforce that check,
-        # and still exposes the same audio-only formats.
+        # increasingly demands a PO token, which the Android client's API
+        # doesn't enforce, so this clears the bot-check from a residential
+        # IP. It does NOT clear it from Render's/Railway's datacenter IPs,
+        # confirmed in production -- YouTube blocklists those IP ranges
+        # directly regardless of player client, a problem client spoofing
+        # can't fix. Kept anyway since it's free and may still help for
+        # other failure modes; the actual fix for the deployed case is the
+        # clearer error message below, pointing users at the workaround
+        # that does reliably work (download the audio yourself, upload the
+        # file directly) instead of yt-dlp's cookie-export wall of text.
         "extractor_args": {"youtube": {"player_client": ["android"]}},
     }
 
@@ -47,6 +52,12 @@ def download_youtube_audio(url: str, out_dir: Path) -> Path:
             info = ydl.extract_info(url, download=True)
             path = Path(ydl.prepare_filename(info))
     except yt_dlp.utils.DownloadError as exc:
+        if "Sign in to confirm" in str(exc):
+            raise RuntimeError(
+                "YouTube is blocking downloads from this server (not specific to this video or "
+                "your account). Download the audio yourself (e.g. with a browser extension or "
+                "yt-dlp locally) and upload the file directly instead -- that always works."
+            ) from exc
         raise RuntimeError(f"Could not download audio from that YouTube URL: {exc}") from exc
 
     if not path.exists():
