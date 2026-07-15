@@ -121,25 +121,23 @@ def predict_notes_adaptive(
 SAFE_CHUNK_SECONDS = 100
 
 
-def _predict_chunk_worker(chunk_path_str: str, dense_polyphony_threshold: float, minimum_note_length: float):
-    """Module-level (picklable, importable) target for ProcessPoolExecutor --
-    see predict_notes_adaptive_chunked for why this runs in its own process.
-    Returns only plain, pickle-safe data (no pretty_midi.PrettyMIDI object,
-    whose internal mido state isn't guaranteed picklable across the process
-    boundary): a notes list *with* velocity included (unlike
-    predict_notes_adaptive's own flat return, which drops it), so the parent
-    process can rebuild real pretty_midi.Note objects after merging."""
-    notes, polyphony, midi_data, thresholds_used = predict_notes_adaptive(
-        Path(chunk_path_str), dense_polyphony_threshold, minimum_note_length
-    )
-    notes_with_velocity = [
-        {"start": n.start, "end": n.end, "pitch": n.pitch, "velocity": n.velocity}
-        for instrument in midi_data.instruments
-        for n in instrument.notes
-    ]
-    program = midi_data.instruments[0].program if midi_data.instruments else 0
-    is_drum = midi_data.instruments[0].is_drum if midi_data.instruments else False
-    return notes_with_velocity, polyphony, thresholds_used, program, is_drum
+def _release_memory_to_os() -> None:
+    """gc.collect() alone frees Python-level references, but CPython/glibc's
+    allocator doesn't necessarily hand freed heap memory back to the OS --
+    RSS (what actually counts against Railway's container memory limit) can
+    stay elevated long after everything's been garbage collected, a
+    well-known issue with numpy/native-heavy workloads specifically.
+    malloc_trim(0) asks glibc to actually shrink the heap. Best-effort: only
+    Linux has this libc symbol, and any failure here shouldn't break
+    transcription over a memory optimization that didn't pan out."""
+    import ctypes
+    import gc
+
+    gc.collect()
+    try:
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except OSError:
+        pass
 
 
 def predict_notes_adaptive_chunked(
@@ -148,36 +146,37 @@ def predict_notes_adaptive_chunked(
     """Same signature and return shape as predict_notes_adaptive -- delegates to
     it directly for anything under SAFE_CHUNK_SECONDS (the overwhelming
     majority of real requests), so short clips are entirely unaffected by this
-    wrapper and pay none of the subprocess overhead described below.
+    wrapper. Longer audio is split into sequential SAFE_CHUNK_SECONDS chunks,
+    each transcribed via the same, unmodified predict_notes_adaptive, with
+    _release_memory_to_os() called between chunks.
 
-    Longer audio is split into sequential SAFE_CHUNK_SECONDS chunks, each run
-    through the same, unmodified predict_notes_adaptive -- but critically, each
-    chunk runs in its *own freshly spawned process*
-    (ProcessPoolExecutor(mp_context=spawn, max_tasks_per_child=1)), not just a
-    loop in this one. Confirmed directly against production that a plain
-    in-process loop over safe-sized chunks *still* crashes the server: a
-    240s file split into 100s/100s/40s chunks crashed while starting the
-    *third* (and shortest) chunk, proving the earlier 90s/120s-safe,
-    150s/240s-crashing boundary wasn't really about a single input's duration
-    -- it's cumulative resource usage (most likely a native leak in repeated
-    tflite Interpreter construction) building up across calls *within one
-    process's lifetime*, regardless of any individual call's own size. A
-    forked child would inherit whatever's already accumulated in this
-    long-lived server process at fork time, so this deliberately uses `spawn`
-    (a genuinely fresh interpreter) rather than the Linux default `fork`, and
-    `max_tasks_per_child=1` so even a multi-chunk file gets a fresh process
-    per chunk, not a reused one. The real cost: each chunk now pays a cold
-    interpreter start (re-importing tflite/numpy/etc. from scratch) instead of
-    reusing the parent's already-imported ones -- slower per chunk, but the
-    only way to guarantee full resource release between chunks without first
-    having to correctly diagnose the exact native leak.
+    Two other approaches were tried and measured directly against production
+    before this one, both worse:
+    1. A plain in-process loop over chunks: crashed a 240s file (100s/100s/40s
+       chunks) while starting the *third*, and shortest, chunk -- proving the
+       90s/120s-safe, 150s/240s-crashing boundary this was built around was
+       never really about one input's own duration, but resource usage
+       accumulating across repeated basic-pitch calls within one process.
+    2. Running each chunk in its own freshly spawned process (isolation that
+       should categorically prevent any accumulation): still crashed the
+       *same* 240s file, and faster, even starting from a freshly restarted,
+       low-memory container -- ruling out session-level accumulation too.
+       Each spawned child pays the full cost of loading its own copy of
+       tflite/numpy/librosa/scipy/numba (this container's biggest
+       dependencies) *in addition to* the parent's already-loaded copy,
+       which made peak memory *worse*, not better, on this 1024MB container.
+    Given that, this settles on the simplest option plus the one lever that
+    plausibly helps without hurting: explicit OS-level memory release between
+    chunks (see _release_memory_to_os), on the theory that Python's/glibc's
+    allocator not returning freed heap back to the OS is a real contributor,
+    even if not provably the *entire* explanation -- see
+    MAX_AUDIO_DURATION_SECONDS's comment in transcribe_audio.py for the
+    honest, currently-tested ceiling this settled on.
 
-    Results are merged after every chunk completes: each chunk's notes are
-    shifted by its time offset and flow into one combined
-    pretty_midi.PrettyMIDI object (rebuilt in this parent process from the
-    plain note dicts _predict_chunk_worker returns, not passed across the
-    process boundary directly) matching what predict_notes_adaptive itself
-    returns. polyphony becomes a duration-weighted average across chunks;
+    Merging: each chunk's notes are shifted by its time offset and flow into
+    one combined pretty_midi.PrettyMIDI object matching what
+    predict_notes_adaptive itself returns (see _merge_chunk_results).
+    polyphony becomes a duration-weighted average across chunks;
     thresholds_used reports whichever chunk's adaptive selection ran last
     (informational metadata -- not worth tracking per-chunk for what's just
     shown back to the user).
@@ -189,13 +188,9 @@ def predict_notes_adaptive_chunked(
     new class of error -- most notes aren't multi-second sustains landing
     exactly on a chunk edge, and overlap-stitching logic to handle the rare
     case that are would add real complexity for a comparatively small gain."""
-    import multiprocessing
     import tempfile
-    from concurrent.futures import ProcessPoolExecutor
-    from concurrent.futures.process import BrokenProcessPool
 
     import librosa
-    import pretty_midi
     import soundfile as sf
 
     duration_s = librosa.get_duration(path=str(audio_path))
@@ -210,27 +205,29 @@ def predict_notes_adaptive_chunked(
     chunk_offsets = []
     chunk_durations = []
 
-    spawn_ctx = multiprocessing.get_context("spawn")
-    with ProcessPoolExecutor(max_workers=1, mp_context=spawn_ctx, max_tasks_per_child=1) as pool:
-        for i, start_sample in enumerate(range(0, len(y), chunk_samples)):
-            chunk_y = y[start_sample : start_sample + chunk_samples]
-            offset_s = start_sample / sr
-            chunk_path = tmp_dir / f"chunk_{i}.wav"
-            sf.write(str(chunk_path), chunk_y, sr)
+    for i, start_sample in enumerate(range(0, len(y), chunk_samples)):
+        chunk_y = y[start_sample : start_sample + chunk_samples]
+        offset_s = start_sample / sr
+        chunk_path = tmp_dir / f"chunk_{i}.wav"
+        sf.write(str(chunk_path), chunk_y, sr)
 
-            try:
-                result = pool.submit(
-                    _predict_chunk_worker, str(chunk_path), dense_polyphony_threshold, minimum_note_length
-                ).result()
-            except BrokenProcessPool as exc:
-                raise RuntimeError(
-                    f"Transcription crashed while processing {offset_s:.0f}s-{offset_s + SAFE_CHUNK_SECONDS:.0f}s "
-                    f"of the audio. Try a shorter clip."
-                ) from exc
+        notes, polyphony, midi_data, thresholds_used = predict_notes_adaptive(
+            chunk_path, dense_polyphony_threshold, minimum_note_length
+        )
+        notes_with_velocity = [
+            {"start": n.start, "end": n.end, "pitch": n.pitch, "velocity": n.velocity}
+            for instrument in midi_data.instruments
+            for n in instrument.notes
+        ]
+        program = midi_data.instruments[0].program if midi_data.instruments else 0
+        is_drum = midi_data.instruments[0].is_drum if midi_data.instruments else False
 
-            chunk_results.append(result)
-            chunk_offsets.append(offset_s)
-            chunk_durations.append(len(chunk_y) / sr)
+        chunk_results.append((notes_with_velocity, polyphony, thresholds_used, program, is_drum))
+        chunk_offsets.append(offset_s)
+        chunk_durations.append(len(chunk_y) / sr)
+
+        del notes, midi_data
+        _release_memory_to_os()
 
     return _merge_chunk_results(chunk_results, chunk_offsets, chunk_durations)
 

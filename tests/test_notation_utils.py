@@ -121,26 +121,46 @@ def test_predict_notes_adaptive_chunked_delegates_when_short(tmp_path, monkeypat
     assert calls == [audio_path]
 
 
-def test_predict_notes_adaptive_chunked_triggers_chunking_when_long(tmp_path, monkeypatch):
-    """Confirms the branch decision only -- predict_notes_adaptive_chunked runs
-    each chunk in a freshly *spawned* process (see its docstring for why:
-    confirmed against production that a plain in-process loop over safe-sized
-    chunks still crashes, cumulatively), so a monkeypatch in this test process
-    can't observe what happens inside those child processes. The actual
-    shifting/merging math is tested directly against _merge_chunk_results
-    below, without any multiprocessing involved."""
+def test_predict_notes_adaptive_chunked_splits_and_shifts_long_audio(tmp_path, monkeypatch):
+    total_duration = SAFE_CHUNK_SECONDS * 2 + 10  # forces 3 chunks: 100s, 100s, 10s
     audio_path = tmp_path / "long.wav"
-    _write_silence(audio_path, SAFE_CHUNK_SECONDS + 10)
+    _write_silence(audio_path, total_duration)
 
-    calls = []
-    monkeypatch.setattr(notation_utils, "predict_notes_adaptive", lambda *a, **k: calls.append(a))
+    call_count = 0
 
-    predict_notes_adaptive_chunked(audio_path)
+    def fake_predict(path, dense_polyphony_threshold=3.4, minimum_note_length=40.0):
+        nonlocal call_count
+        call_count += 1
+        # One note per chunk, always at t=0 of that chunk's own (chunk-local)
+        # timeline -- if offset-shifting works, the merged result should show
+        # these landing at 0s/SAFE_CHUNK_SECONDS/2*SAFE_CHUNK_SECONDS instead
+        # of all three piling up at 0.
+        pitch = 60 + call_count
+        notes = [{"start": 0.0, "end": 1.0, "pitch": pitch}]
+        midi = pretty_midi.PrettyMIDI()
+        instrument = pretty_midi.Instrument(program=0)
+        instrument.notes.append(pretty_midi.Note(velocity=100, pitch=pitch, start=0.0, end=1.0))
+        midi.instruments.append(instrument)
+        return notes, float(call_count), midi, {"onset_threshold": 0.5, "frame_threshold": 0.3}
 
-    # Never called directly in *this* process for the long-audio path --
-    # confirms chunking (not delegation) was taken, without asserting
-    # anything about the spawned children themselves.
-    assert calls == []
+    monkeypatch.setattr(notation_utils, "predict_notes_adaptive", fake_predict)
+
+    notes, polyphony, midi_data, thresholds_used = predict_notes_adaptive_chunked(audio_path)
+
+    assert call_count == 3
+
+    starts = sorted(n["start"] for n in notes)
+    assert starts == [0.0, SAFE_CHUNK_SECONDS, SAFE_CHUNK_SECONDS * 2]
+
+    midi_starts = sorted(n.start for n in midi_data.instruments[0].notes)
+    assert midi_starts == pytest.approx(starts)
+
+    # Duration-weighted average of the three chunks' polyphonies (1, 2, 3),
+    # weighted by each chunk's actual length (100s, 100s, 10s).
+    expected_polyphony = (1 * SAFE_CHUNK_SECONDS + 2 * SAFE_CHUNK_SECONDS + 3 * 10) / total_duration
+    assert polyphony == pytest.approx(expected_polyphony, rel=1e-3)
+
+    assert thresholds_used == {"onset_threshold": 0.5, "frame_threshold": 0.3}
 
 
 def test_merge_chunk_results_shifts_notes_by_chunk_offset():
