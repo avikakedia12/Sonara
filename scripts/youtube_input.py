@@ -10,37 +10,34 @@ librosa falls back to) reads m4a/AAC directly. Downloading the m4a
 audio-only stream as-is and handing that straight to the existing pipeline
 is both simpler and requires one fewer dependency than the usual
 yt-dlp-plus-ffmpeg setup.
+
+Two things have to be in place for this to work from Railway (confirmed in
+production, both required together -- neither alone is enough):
+
+- YT_PROXY_URL: routes yt-dlp's requests through a residential proxy (e.g.
+  "http://user:pass@p.webshare.io:80"). Railway's datacenter IP range is
+  blocked by YouTube's bot check regardless of player client or PO token --
+  this is what actually clears that block. Optional: unset, yt-dlp just
+  connects directly (fine for local dev on a residential IP).
+- POT_PROVIDER_URL: the bgutil-ytdlp-pot-provider sidecar (see the
+  neighboring Railway service "bgutil-pot-provider") mints the PO token the
+  web client needs. Without a valid token, forcing a specific player client
+  (android/tv_embedded) to dodge the token requirement instead loses
+  real audio-only formats entirely -- those clients only expose progressive
+  (video+audio combined) streams, and the "web" client's own audio-only
+  formats get filtered out under YouTube's SABR streaming restriction
+  (https://github.com/yt-dlp/yt-dlp/issues/12482). With a valid token,
+  yt-dlp's default client selection produces genuine audio-only m4a/webm
+  formats normally -- no player_client override needed.
 """
 import os
 from pathlib import Path
 
 import yt_dlp
 
-# bgutil-ytdlp-pot-provider sidecar (see the neighboring Railway service
-# "bgutil-pot-provider") mints the PO token YouTube's web client now
-# requires. Without it, every player client eventually hits the "Sign in to
-# confirm you're not a bot" wall from Railway's datacenter IPs regardless of
-# client spoofing -- confirmed in production.
-#
-# The web client alone isn't enough even with a valid token: YouTube forces
-# SABR streaming for web, which omits direct format URLs entirely (yt-dlp
-# only gets image formats back -- see
-# https://github.com/yt-dlp/yt-dlp/issues/12482). android/tv_embedded still
-# expose real progressive audio URLs and aren't gated behind a token, so
-# they're kept in the mix for their formats while web (protected by the
-# token) is what actually clears the bot check -- confirmed together they
-# extract a usable format where either alone fails.
 POT_PROVIDER_URL = os.environ.get(
     "POT_PROVIDER_URL", "http://bgutil-pot-provider.railway.internal:4416"
 )
-PLAYER_CLIENTS = ["android", "tv_embedded", "web"]
-
-# The pot-provider token alone doesn't clear YouTube's bot check from
-# Railway -- confirmed in production the block is on Railway's IP
-# reputation, not the token. YT_PROXY_URL routes yt-dlp's actual requests
-# through a residential proxy (e.g. "http://user:pass@p.webshare.io:80")
-# so they no longer originate from that flagged range. Optional: unset,
-# yt-dlp just connects directly (fine for local dev).
 YT_PROXY_URL = os.environ.get("YT_PROXY_URL")
 
 
@@ -61,7 +58,6 @@ def download_youtube_audio(url: str, out_dir: Path) -> Path:
         # No postprocessors -- keep whatever container the audio-only stream
         # already comes in rather than re-encoding via ffmpeg.
         "extractor_args": {
-            "youtube": {"player_client": PLAYER_CLIENTS},
             "youtubepot-bgutilhttp": {"base_url": [POT_PROVIDER_URL]},
         },
     }
