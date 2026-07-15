@@ -35,6 +35,14 @@ POT_PROVIDER_URL = os.environ.get(
 )
 PLAYER_CLIENTS = ["android", "tv_embedded", "web"]
 
+# The pot-provider token alone doesn't clear YouTube's bot check from
+# Railway -- confirmed in production the block is on Railway's IP
+# reputation, not the token. YT_PROXY_URL routes yt-dlp's actual requests
+# through a residential proxy (e.g. "http://user:pass@p.webshare.io:80")
+# so they no longer originate from that flagged range. Optional: unset,
+# yt-dlp just connects directly (fine for local dev).
+YT_PROXY_URL = os.environ.get("YT_PROXY_URL")
+
 
 def download_youtube_audio(url: str, out_dir: Path) -> Path:
     """Downloads the best available audio-only stream (preferring m4a, which
@@ -57,6 +65,8 @@ def download_youtube_audio(url: str, out_dir: Path) -> Path:
             "youtubepot-bgutilhttp": {"base_url": [POT_PROVIDER_URL]},
         },
     }
+    if YT_PROXY_URL:
+        ydl_opts["proxy"] = YT_PROXY_URL
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
