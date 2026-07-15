@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { difficulty } from '../api'
 import { useAsyncAction } from '../hooks/useAsyncAction'
 import { useRotatingMessage } from '../hooks/useRotatingMessage'
+import { useSimulatedProgress } from '../hooks/useSimulatedProgress'
 import AudioSourceInput from '../components/AudioSourceInput'
 import EmptyState from '../components/EmptyState'
+import LoadingProgress from '../components/LoadingProgress'
 import { Spinner } from '../components/Icons'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -43,6 +45,7 @@ export default function DifficultyPage() {
   const [source, setSource] = useState({ file: null })
   const { loading, error, result, run } = useAsyncAction()
   const loadingMessage = useRotatingMessage(LOADING_MESSAGES, 3200, loading)
+  const progress = useSimulatedProgress(loading)
 
   const hasSource = Boolean(source.file || source.youtubeUrl)
 
@@ -68,7 +71,7 @@ export default function DifficultyPage() {
           {loading && <Spinner />}
           {loading ? 'Analyzing…' : 'Rate difficulty'}
         </Button>
-        {loading && <p className="-mt-1.5 text-[0.85rem] text-dim animate-fade-in">{loadingMessage}</p>}
+        {loading && <LoadingProgress message={loadingMessage} progress={progress} />}
       </form>
 
       {error && <p className="mt-5 rounded-(--radius-s) border-l-[3px] border-error bg-error-wash px-4.5 py-3.5 text-[0.9rem] whitespace-pre-wrap text-error">Error: {error}</p>}

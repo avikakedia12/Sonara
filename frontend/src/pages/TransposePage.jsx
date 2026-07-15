@@ -3,9 +3,11 @@ import { transpose, INSTRUMENTS } from '../api'
 import { downloadFile } from '../downloadFile'
 import { useAsyncAction } from '../hooks/useAsyncAction'
 import { useRotatingMessage } from '../hooks/useRotatingMessage'
+import { useSimulatedProgress } from '../hooks/useSimulatedProgress'
 import SheetMusic from '../components/SheetMusic'
 import AudioSourceInput from '../components/AudioSourceInput'
 import EmptyState from '../components/EmptyState'
+import LoadingProgress from '../components/LoadingProgress'
 import { DownloadIcon, Spinner } from '../components/Icons'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -25,6 +27,7 @@ export default function TransposePage() {
   const [targetInstrument, setTargetInstrument] = useState('clarinet')
   const { loading, error, result, run } = useAsyncAction()
   const loadingMessage = useRotatingMessage(LOADING_MESSAGES, 3200, loading)
+  const progress = useSimulatedProgress(loading)
 
   const hasSource = Boolean(source.file || source.youtubeUrl)
 
@@ -64,7 +67,7 @@ export default function TransposePage() {
           {loading && <Spinner />}
           {loading ? 'Transposing…' : 'Transpose'}
         </Button>
-        {loading && <p className="-mt-1.5 text-[0.85rem] text-dim animate-fade-in">{loadingMessage}</p>}
+        {loading && <LoadingProgress message={loadingMessage} progress={progress} />}
       </form>
 
       {error && <p className="mt-5 rounded-(--radius-s) border-l-[3px] border-error bg-error-wash px-4.5 py-3.5 text-[0.9rem] whitespace-pre-wrap text-error">Error: {error}</p>}
