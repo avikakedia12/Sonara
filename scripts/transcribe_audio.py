@@ -36,6 +36,17 @@ from music21 import converter, metadata as m21metadata, meter, pitch as m21pitch
 from notation_utils import insert_with_ties, predict_notes_adaptive, quiet_basic_pitch
 from render_score import render_to_svg_pages
 
+# basic-pitch's tflite backend (Render/Railway's Linux deployment -- see
+# requirements.txt) segfaults the whole server process on long inputs: a
+# 4-minute file reliably crashed it mid-inference in production, taking down
+# every other in-flight request too, with no Python traceback possible from a
+# native crash. A duration cap enforced *before* that code path is the only
+# way to stop it, since nothing here can catch a segfault -- 120s is well
+# clear of the 30s clips that are known-safe and well short of the 240s that
+# reliably crashed, without real measurements at the actual boundary (each
+# attempt takes down the shared production server for everyone using it).
+MAX_AUDIO_DURATION_SECONDS = 120
+
 
 def estimate_beat_times(audio_path: Path) -> tuple[float, np.ndarray]:
     y, sr = librosa.load(str(audio_path), sr=None, mono=True)
@@ -106,6 +117,14 @@ def transcribe(
     short as ~55ms had over half its notes silently discarded at 127.70ms);
     pass an even lower value for material that's still losing notes."""
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    duration = librosa.get_duration(path=str(audio_path))
+    if duration > MAX_AUDIO_DURATION_SECONDS:
+        raise ValueError(
+            f"Audio is {duration:.0f}s long; this deployment only accepts up to "
+            f"{MAX_AUDIO_DURATION_SECONDS}s per file (longer inputs crash the "
+            f"transcription backend). Trim the clip and try again."
+        )
 
     polyphony = thresholds_used = tempo_bpm = None
     min_note_len_kwarg = {"minimum_note_length": 40.0 if minimum_note_length is None else minimum_note_length}
