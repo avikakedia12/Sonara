@@ -16,15 +16,24 @@ from pathlib import Path
 
 import yt_dlp
 
-# bgutil-ytdlp-pot-provider sidecar (see scripts/api.py's neighboring Railway
-# service "bgutil-pot-provider") mints the PO token YouTube's web client now
+# bgutil-ytdlp-pot-provider sidecar (see the neighboring Railway service
+# "bgutil-pot-provider") mints the PO token YouTube's web client now
 # requires. Without it, every player client eventually hits the "Sign in to
 # confirm you're not a bot" wall from Railway's datacenter IPs regardless of
-# client spoofing -- confirmed in production. With a valid token the web
-# client works normally, so there's no need to pin a workaround client.
+# client spoofing -- confirmed in production.
+#
+# The web client alone isn't enough even with a valid token: YouTube forces
+# SABR streaming for web, which omits direct format URLs entirely (yt-dlp
+# only gets image formats back -- see
+# https://github.com/yt-dlp/yt-dlp/issues/12482). android/tv_embedded still
+# expose real progressive audio URLs and aren't gated behind a token, so
+# they're kept in the mix for their formats while web (protected by the
+# token) is what actually clears the bot check -- confirmed together they
+# extract a usable format where either alone fails.
 POT_PROVIDER_URL = os.environ.get(
     "POT_PROVIDER_URL", "http://bgutil-pot-provider.railway.internal:4416"
 )
+PLAYER_CLIENTS = ["android", "tv_embedded", "web"]
 
 
 def download_youtube_audio(url: str, out_dir: Path) -> Path:
@@ -44,6 +53,7 @@ def download_youtube_audio(url: str, out_dir: Path) -> Path:
         # No postprocessors -- keep whatever container the audio-only stream
         # already comes in rather than re-encoding via ffmpeg.
         "extractor_args": {
+            "youtube": {"player_client": PLAYER_CLIENTS},
             "youtubepot-bgutilhttp": {"base_url": [POT_PROVIDER_URL]},
         },
     }
