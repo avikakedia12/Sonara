@@ -33,18 +33,19 @@ import librosa
 import numpy as np
 from music21 import converter, metadata as m21metadata, meter, pitch as m21pitch, stream, tempo as m21tempo
 
-from notation_utils import insert_with_ties, predict_notes_adaptive, quiet_basic_pitch
+from notation_utils import insert_with_ties, predict_notes_adaptive_chunked, quiet_basic_pitch
 from render_score import render_to_svg_pages
 
 # basic-pitch's tflite backend (Render/Railway's Linux deployment -- see
-# requirements.txt) segfaults the whole server process on long inputs: no
-# Python traceback is possible from a native crash, so a duration cap
-# enforced *before* that code path is the only way to stop it. The actual
-# boundary was measured directly against production (each attempt takes
-# down the shared server for everyone using it, so this was done in as few
-# rounds as possible): 90s and 120s both completed cleanly, 150s and 240s
-# both crashed the server. 120s is the confirmed-safe value, not a guess.
-MAX_AUDIO_DURATION_SECONDS = 120
+# requirements.txt) segfaults the whole server process on long inputs -- see
+# notation_utils.SAFE_CHUNK_SECONDS and predict_notes_adaptive_chunked, which
+# transparently splits anything longer into chunks that stay under the
+# confirmed-safe boundary instead of feeding one long, crash-triggering input
+# to a single inference call. With that in place, this cap is no longer a
+# crash-avoidance limit -- it's a sanity/cost bound on total processing time
+# (each ~100s chunk is a full basic-pitch inference pass), generous enough to
+# cover essentially any real song.
+MAX_AUDIO_DURATION_SECONDS = 600
 
 
 def estimate_beat_times(audio_path: Path) -> tuple[float, np.ndarray]:
@@ -143,7 +144,7 @@ def transcribe(
         beat_future = executor.submit(estimate_beat_times, audio_path) if quantize else None
 
         if onset_threshold is None and frame_threshold is None:
-            _, polyphony, midi_data, thresholds_used = predict_notes_adaptive(audio_path, **min_note_len_kwarg)
+            _, polyphony, midi_data, thresholds_used = predict_notes_adaptive_chunked(audio_path, **min_note_len_kwarg)
             print(f"Estimated polyphony: {polyphony:.2f} simultaneous notes/onset -> thresholds {thresholds_used}")
         else:
             from basic_pitch.inference import predict

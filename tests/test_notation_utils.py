@@ -1,6 +1,18 @@
+import numpy as np
+import pretty_midi
+import pytest
+import soundfile as sf
 from music21 import chord as m21chord, note as m21note, stream
 
-from notation_utils import average_polyphony, insert_with_ties, skyline_melody, unicode_braille_to_brf
+import notation_utils
+from notation_utils import (
+    SAFE_CHUNK_SECONDS,
+    average_polyphony,
+    insert_with_ties,
+    predict_notes_adaptive_chunked,
+    skyline_melody,
+    unicode_braille_to_brf,
+)
 
 
 def test_average_polyphony_empty():
@@ -80,3 +92,71 @@ def test_skyline_melody_preserves_rests():
     elements = list(melody.recurse().notesAndRests)
 
     assert [e.isRest for e in elements] == [False, True, False]
+
+
+def _write_silence(path, duration_s, sr=8000):
+    """A real (but silent, tiny-sample-rate) audio file -- enough for librosa's
+    real duration/load/slice logic to operate on for real in these tests,
+    while the actually-expensive part (basic-pitch inference) is faked."""
+    sf.write(str(path), np.zeros(int(duration_s * sr), dtype=np.float32), sr)
+
+
+def test_predict_notes_adaptive_chunked_delegates_when_short(tmp_path, monkeypatch):
+    audio_path = tmp_path / "short.wav"
+    _write_silence(audio_path, SAFE_CHUNK_SECONDS - 10)
+
+    calls = []
+
+    def fake_predict(path, dense_polyphony_threshold=3.4, minimum_note_length=40.0):
+        calls.append(path)
+        return [], 0.0, pretty_midi.PrettyMIDI(), {"onset_threshold": 0.5, "frame_threshold": 0.3}
+
+    monkeypatch.setattr(notation_utils, "predict_notes_adaptive", fake_predict)
+
+    predict_notes_adaptive_chunked(audio_path)
+
+    # Delegates straight to predict_notes_adaptive on the *original* path --
+    # no chunking overhead (temp files, multiple calls) for the common case.
+    assert calls == [audio_path]
+
+
+def test_predict_notes_adaptive_chunked_splits_and_shifts_long_audio(tmp_path, monkeypatch):
+    total_duration = SAFE_CHUNK_SECONDS * 2 + 10  # forces 3 chunks: 100s, 100s, 10s
+    audio_path = tmp_path / "long.wav"
+    _write_silence(audio_path, total_duration)
+
+    call_count = 0
+
+    def fake_predict(path, dense_polyphony_threshold=3.4, minimum_note_length=40.0):
+        nonlocal call_count
+        call_count += 1
+        # One note per chunk, always at t=0 of that chunk's own (chunk-local)
+        # timeline -- if offset-shifting works, the merged result should show
+        # these landing at 0s/SAFE_CHUNK_SECONDS/2*SAFE_CHUNK_SECONDS instead
+        # of all three piling up at 0.
+        pitch = 60 + call_count
+        notes = [{"start": 0.0, "end": 1.0, "pitch": pitch}]
+        midi = pretty_midi.PrettyMIDI()
+        instrument = pretty_midi.Instrument(program=0)
+        instrument.notes.append(pretty_midi.Note(velocity=100, pitch=pitch, start=0.0, end=1.0))
+        midi.instruments.append(instrument)
+        return notes, float(call_count), midi, {"onset_threshold": 0.5, "frame_threshold": 0.3}
+
+    monkeypatch.setattr(notation_utils, "predict_notes_adaptive", fake_predict)
+
+    notes, polyphony, midi_data, thresholds_used = predict_notes_adaptive_chunked(audio_path)
+
+    assert call_count == 3
+
+    starts = sorted(n["start"] for n in notes)
+    assert starts == [0.0, SAFE_CHUNK_SECONDS, SAFE_CHUNK_SECONDS * 2]
+
+    midi_starts = sorted(n.start for n in midi_data.instruments[0].notes)
+    assert midi_starts == pytest.approx(starts)
+
+    # Duration-weighted average of the three chunks' polyphonies (1, 2, 3),
+    # weighted by each chunk's actual length (100s, 100s, 10s).
+    expected_polyphony = (1 * SAFE_CHUNK_SECONDS + 2 * SAFE_CHUNK_SECONDS + 3 * 10) / total_duration
+    assert polyphony == pytest.approx(expected_polyphony, rel=1e-3)
+
+    assert thresholds_used == {"onset_threshold": 0.5, "frame_threshold": 0.3}

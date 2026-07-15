@@ -111,6 +111,93 @@ def predict_notes_adaptive(
     dense_notes, midi_data = decode(**dense)
     return dense_notes, polyphony, midi_data, dense
 
+
+# Margin below the 120s duration basic-pitch's tflite backend was confirmed
+# safe up to (measured directly against production: 90s/120s completed
+# cleanly, 150s/240s reliably segfaulted the whole server) -- a real song's
+# spectral density could differ enough from the synthetic looped test clip
+# that established that boundary to matter, so this stays a bit under it
+# rather than pushing right up against a boundary only sampled at a few points.
+SAFE_CHUNK_SECONDS = 100
+
+
+def predict_notes_adaptive_chunked(
+    audio_path: Path, dense_polyphony_threshold: float = 3.4, minimum_note_length: float = 40.0
+) -> tuple[list[dict], float, "pretty_midi.PrettyMIDI", dict]:
+    """Same signature and return shape as predict_notes_adaptive -- delegates to
+    it directly for anything under SAFE_CHUNK_SECONDS (the overwhelming
+    majority of real requests), so short clips are entirely unaffected by this
+    wrapper. Longer audio is split into sequential SAFE_CHUNK_SECONDS chunks
+    (each transcribed via the same, unmodified predict_notes_adaptive -- one
+    safe call per chunk instead of one crash-triggering call on the whole
+    file), then merged: every note's start/end is shifted by its chunk's time
+    offset, and merged notes flow into one combined pretty_midi.PrettyMIDI
+    object matching what predict_notes_adaptive itself returns. polyphony
+    becomes a duration-weighted average across chunks; thresholds_used reports
+    whichever chunk's adaptive selection ran last (informational metadata --
+    not worth tracking per-chunk for what's just shown back to the user).
+
+    Known tradeoff, not hidden: notes aren't stitched across chunk boundaries,
+    so a note sustained exactly across a ~100s mark can come out as two
+    shorter notes instead of one. Consistent with this pipeline's existing
+    best-effort accuracy framing (see accuracy_note in api.py) rather than a
+    new class of error -- most notes aren't multi-second sustains landing
+    exactly on a chunk edge, and overlap-stitching logic to handle the rare
+    case that are would add real complexity for a comparatively small gain."""
+    import tempfile
+
+    import librosa
+    import pretty_midi
+    import soundfile as sf
+
+    duration_s = librosa.get_duration(path=str(audio_path))
+    if duration_s <= SAFE_CHUNK_SECONDS:
+        return predict_notes_adaptive(audio_path, dense_polyphony_threshold, minimum_note_length)
+
+    y, sr = librosa.load(str(audio_path), sr=None, mono=True)
+    chunk_samples = int(SAFE_CHUNK_SECONDS * sr)
+    tmp_dir = Path(tempfile.mkdtemp(prefix="sonara_chunk_"))
+
+    all_notes: list[dict] = []
+    combined_instrument = None
+    weighted_polyphony_sum = 0.0
+    thresholds_used: dict = {}
+
+    for i, start_sample in enumerate(range(0, len(y), chunk_samples)):
+        chunk_y = y[start_sample : start_sample + chunk_samples]
+        offset_s = start_sample / sr
+        chunk_path = tmp_dir / f"chunk_{i}.wav"
+        sf.write(str(chunk_path), chunk_y, sr)
+
+        notes, polyphony, midi_data, thresholds_used = predict_notes_adaptive(
+            chunk_path, dense_polyphony_threshold, minimum_note_length
+        )
+        weighted_polyphony_sum += polyphony * (len(chunk_y) / sr)
+
+        for note_dict in notes:
+            all_notes.append({
+                "start": note_dict["start"] + offset_s,
+                "end": note_dict["end"] + offset_s,
+                "pitch": note_dict["pitch"],
+            })
+
+        if midi_data.instruments:
+            if combined_instrument is None:
+                src = midi_data.instruments[0]
+                combined_instrument = pretty_midi.Instrument(program=src.program, is_drum=src.is_drum, name=src.name)
+            for n in midi_data.instruments[0].notes:
+                combined_instrument.notes.append(
+                    pretty_midi.Note(velocity=n.velocity, pitch=n.pitch, start=n.start + offset_s, end=n.end + offset_s)
+                )
+
+    combined_midi = pretty_midi.PrettyMIDI()
+    if combined_instrument is not None:
+        combined_midi.instruments.append(combined_instrument)
+
+    polyphony = weighted_polyphony_sum / (len(y) / sr)
+    return all_notes, polyphony, combined_midi, thresholds_used
+
+
 # North American Braille ASCII (NABCC) table: index i is the ASCII character
 # for the braille cell whose dot pattern equals the 6-bit mask i (bit0=dot1,
 # bit1=dot2, ... bit5=dot6) -- i.e. the same order as Unicode's Braille
