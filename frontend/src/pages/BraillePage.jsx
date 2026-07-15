@@ -102,7 +102,7 @@ export default function BraillePage() {
             </Button>
           </div>
           <h3 className="text-lg">Braille (.brl)</h3>
-          <pre className="overflow-x-auto rounded-(--radius-m) bg-heading p-6 text-[1.3rem] leading-[1.9] tracking-wide whitespace-pre text-[#f0edf7] shadow-(--shadow-s)">{result.brl}</pre>
+          <pre className="overflow-x-auto rounded-(--radius-m) bg-heading p-6 text-[0.7rem] leading-[1.3] tracking-normal whitespace-pre text-[#f0edf7] shadow-(--shadow-s)">{result.brl}</pre>
         </div>
       )}
     </section>
