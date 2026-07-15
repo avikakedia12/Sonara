@@ -37,15 +37,14 @@ from notation_utils import insert_with_ties, predict_notes_adaptive, quiet_basic
 from render_score import render_to_svg_pages
 
 # basic-pitch's tflite backend (Render/Railway's Linux deployment -- see
-# requirements.txt) segfaults the whole server process on long inputs: a
-# 4-minute file reliably crashed it mid-inference in production, taking down
-# every other in-flight request too, with no Python traceback possible from a
-# native crash. A duration cap enforced *before* that code path is the only
-# way to stop it, since nothing here can catch a segfault -- 120s is well
-# clear of the 30s clips that are known-safe and well short of the 240s that
-# reliably crashed, without real measurements at the actual boundary (each
-# attempt takes down the shared production server for everyone using it).
-MAX_AUDIO_DURATION_SECONDS = 300
+# requirements.txt) segfaults the whole server process on long inputs: no
+# Python traceback is possible from a native crash, so a duration cap
+# enforced *before* that code path is the only way to stop it. The actual
+# boundary was measured directly against production (each attempt takes
+# down the shared server for everyone using it, so this was done in as few
+# rounds as possible): 90s and 120s both completed cleanly, 150s and 240s
+# both crashed the server. 120s is the confirmed-safe value, not a guess.
+MAX_AUDIO_DURATION_SECONDS = 120
 
 
 def estimate_beat_times(audio_path: Path) -> tuple[float, np.ndarray]:
