@@ -121,21 +121,66 @@ def predict_notes_adaptive(
 SAFE_CHUNK_SECONDS = 100
 
 
+def _predict_chunk_worker(chunk_path_str: str, dense_polyphony_threshold: float, minimum_note_length: float):
+    """Module-level (picklable, importable) target for ProcessPoolExecutor --
+    see predict_notes_adaptive_chunked for why this runs in its own process.
+    Returns only plain, pickle-safe data (no pretty_midi.PrettyMIDI object,
+    whose internal mido state isn't guaranteed picklable across the process
+    boundary): a notes list *with* velocity included (unlike
+    predict_notes_adaptive's own flat return, which drops it), so the parent
+    process can rebuild real pretty_midi.Note objects after merging."""
+    notes, polyphony, midi_data, thresholds_used = predict_notes_adaptive(
+        Path(chunk_path_str), dense_polyphony_threshold, minimum_note_length
+    )
+    notes_with_velocity = [
+        {"start": n.start, "end": n.end, "pitch": n.pitch, "velocity": n.velocity}
+        for instrument in midi_data.instruments
+        for n in instrument.notes
+    ]
+    program = midi_data.instruments[0].program if midi_data.instruments else 0
+    is_drum = midi_data.instruments[0].is_drum if midi_data.instruments else False
+    return notes_with_velocity, polyphony, thresholds_used, program, is_drum
+
+
 def predict_notes_adaptive_chunked(
     audio_path: Path, dense_polyphony_threshold: float = 3.4, minimum_note_length: float = 40.0
 ) -> tuple[list[dict], float, "pretty_midi.PrettyMIDI", dict]:
     """Same signature and return shape as predict_notes_adaptive -- delegates to
     it directly for anything under SAFE_CHUNK_SECONDS (the overwhelming
     majority of real requests), so short clips are entirely unaffected by this
-    wrapper. Longer audio is split into sequential SAFE_CHUNK_SECONDS chunks
-    (each transcribed via the same, unmodified predict_notes_adaptive -- one
-    safe call per chunk instead of one crash-triggering call on the whole
-    file), then merged: every note's start/end is shifted by its chunk's time
-    offset, and merged notes flow into one combined pretty_midi.PrettyMIDI
-    object matching what predict_notes_adaptive itself returns. polyphony
-    becomes a duration-weighted average across chunks; thresholds_used reports
-    whichever chunk's adaptive selection ran last (informational metadata --
-    not worth tracking per-chunk for what's just shown back to the user).
+    wrapper and pay none of the subprocess overhead described below.
+
+    Longer audio is split into sequential SAFE_CHUNK_SECONDS chunks, each run
+    through the same, unmodified predict_notes_adaptive -- but critically, each
+    chunk runs in its *own freshly spawned process*
+    (ProcessPoolExecutor(mp_context=spawn, max_tasks_per_child=1)), not just a
+    loop in this one. Confirmed directly against production that a plain
+    in-process loop over safe-sized chunks *still* crashes the server: a
+    240s file split into 100s/100s/40s chunks crashed while starting the
+    *third* (and shortest) chunk, proving the earlier 90s/120s-safe,
+    150s/240s-crashing boundary wasn't really about a single input's duration
+    -- it's cumulative resource usage (most likely a native leak in repeated
+    tflite Interpreter construction) building up across calls *within one
+    process's lifetime*, regardless of any individual call's own size. A
+    forked child would inherit whatever's already accumulated in this
+    long-lived server process at fork time, so this deliberately uses `spawn`
+    (a genuinely fresh interpreter) rather than the Linux default `fork`, and
+    `max_tasks_per_child=1` so even a multi-chunk file gets a fresh process
+    per chunk, not a reused one. The real cost: each chunk now pays a cold
+    interpreter start (re-importing tflite/numpy/etc. from scratch) instead of
+    reusing the parent's already-imported ones -- slower per chunk, but the
+    only way to guarantee full resource release between chunks without first
+    having to correctly diagnose the exact native leak.
+
+    Results are merged after every chunk completes: each chunk's notes are
+    shifted by its time offset and flow into one combined
+    pretty_midi.PrettyMIDI object (rebuilt in this parent process from the
+    plain note dicts _predict_chunk_worker returns, not passed across the
+    process boundary directly) matching what predict_notes_adaptive itself
+    returns. polyphony becomes a duration-weighted average across chunks;
+    thresholds_used reports whichever chunk's adaptive selection ran last
+    (informational metadata -- not worth tracking per-chunk for what's just
+    shown back to the user).
 
     Known tradeoff, not hidden: notes aren't stitched across chunk boundaries,
     so a note sustained exactly across a ~100s mark can come out as two
@@ -144,7 +189,10 @@ def predict_notes_adaptive_chunked(
     new class of error -- most notes aren't multi-second sustains landing
     exactly on a chunk edge, and overlap-stitching logic to handle the rare
     case that are would add real complexity for a comparatively small gain."""
+    import multiprocessing
     import tempfile
+    from concurrent.futures import ProcessPoolExecutor
+    from concurrent.futures.process import BrokenProcessPool
 
     import librosa
     import pretty_midi
@@ -158,43 +206,77 @@ def predict_notes_adaptive_chunked(
     chunk_samples = int(SAFE_CHUNK_SECONDS * sr)
     tmp_dir = Path(tempfile.mkdtemp(prefix="sonara_chunk_"))
 
+    chunk_results = []
+    chunk_offsets = []
+    chunk_durations = []
+
+    spawn_ctx = multiprocessing.get_context("spawn")
+    with ProcessPoolExecutor(max_workers=1, mp_context=spawn_ctx, max_tasks_per_child=1) as pool:
+        for i, start_sample in enumerate(range(0, len(y), chunk_samples)):
+            chunk_y = y[start_sample : start_sample + chunk_samples]
+            offset_s = start_sample / sr
+            chunk_path = tmp_dir / f"chunk_{i}.wav"
+            sf.write(str(chunk_path), chunk_y, sr)
+
+            try:
+                result = pool.submit(
+                    _predict_chunk_worker, str(chunk_path), dense_polyphony_threshold, minimum_note_length
+                ).result()
+            except BrokenProcessPool as exc:
+                raise RuntimeError(
+                    f"Transcription crashed while processing {offset_s:.0f}s-{offset_s + SAFE_CHUNK_SECONDS:.0f}s "
+                    f"of the audio. Try a shorter clip."
+                ) from exc
+
+            chunk_results.append(result)
+            chunk_offsets.append(offset_s)
+            chunk_durations.append(len(chunk_y) / sr)
+
+    return _merge_chunk_results(chunk_results, chunk_offsets, chunk_durations)
+
+
+def _merge_chunk_results(
+    chunk_results: list[tuple[list[dict], float, dict, int, bool]],
+    chunk_offsets: list[float],
+    chunk_durations: list[float],
+) -> tuple[list[dict], float, "pretty_midi.PrettyMIDI", dict]:
+    """Pure merge step, deliberately factored out of predict_notes_adaptive_chunked
+    so it's testable without any multiprocessing involved -- spawned child
+    processes re-import this module fresh, so a test monkeypatch on
+    predict_notes_adaptive in the test process can't reach into them anyway;
+    this is the part that's actually meaningful to unit-test directly.
+    chunk_results is one _predict_chunk_worker return tuple per chunk, in
+    order: (notes_with_velocity, polyphony, thresholds_used, program, is_drum)."""
+    import pretty_midi
+
     all_notes: list[dict] = []
     combined_instrument = None
     weighted_polyphony_sum = 0.0
     thresholds_used: dict = {}
 
-    for i, start_sample in enumerate(range(0, len(y), chunk_samples)):
-        chunk_y = y[start_sample : start_sample + chunk_samples]
-        offset_s = start_sample / sr
-        chunk_path = tmp_dir / f"chunk_{i}.wav"
-        sf.write(str(chunk_path), chunk_y, sr)
+    for (notes, polyphony, thresholds_used, program, is_drum), offset_s, chunk_duration in zip(
+        chunk_results, chunk_offsets, chunk_durations
+    ):
+        weighted_polyphony_sum += polyphony * chunk_duration
 
-        notes, polyphony, midi_data, thresholds_used = predict_notes_adaptive(
-            chunk_path, dense_polyphony_threshold, minimum_note_length
-        )
-        weighted_polyphony_sum += polyphony * (len(chunk_y) / sr)
+        if combined_instrument is None:
+            combined_instrument = pretty_midi.Instrument(program=program, is_drum=is_drum)
 
         for note_dict in notes:
-            all_notes.append({
-                "start": note_dict["start"] + offset_s,
-                "end": note_dict["end"] + offset_s,
-                "pitch": note_dict["pitch"],
-            })
-
-        if midi_data.instruments:
-            if combined_instrument is None:
-                src = midi_data.instruments[0]
-                combined_instrument = pretty_midi.Instrument(program=src.program, is_drum=src.is_drum, name=src.name)
-            for n in midi_data.instruments[0].notes:
-                combined_instrument.notes.append(
-                    pretty_midi.Note(velocity=n.velocity, pitch=n.pitch, start=n.start + offset_s, end=n.end + offset_s)
+            shifted_start = note_dict["start"] + offset_s
+            shifted_end = note_dict["end"] + offset_s
+            all_notes.append({"start": shifted_start, "end": shifted_end, "pitch": note_dict["pitch"]})
+            combined_instrument.notes.append(
+                pretty_midi.Note(
+                    velocity=note_dict["velocity"], pitch=note_dict["pitch"], start=shifted_start, end=shifted_end
                 )
+            )
 
     combined_midi = pretty_midi.PrettyMIDI()
     if combined_instrument is not None:
         combined_midi.instruments.append(combined_instrument)
 
-    polyphony = weighted_polyphony_sum / (len(y) / sr)
+    polyphony = weighted_polyphony_sum / sum(chunk_durations)
     return all_notes, polyphony, combined_midi, thresholds_used
 
 
