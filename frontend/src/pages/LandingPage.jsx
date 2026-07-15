@@ -46,6 +46,10 @@ export default function LandingPage() {
   return (
     <div className="relative">
       <section className="relative flex min-h-svh flex-col items-center overflow-hidden">
+        <p className="absolute top-6 right-7 z-30 m-0 text-[0.85rem] font-semibold tracking-wide text-dim">
+          Avika Kedia
+        </p>
+
         <div className="relative z-20 flex flex-col items-center pt-[9vh] text-center">
           <img src="/favicon.svg" alt="" aria-hidden="true" className="size-16 drop-shadow-[0_0_18px_rgba(134,59,255,0.55)]" />
           <h1 className="mt-4 mb-0 bg-gradient-to-r from-[#863bff] to-[#47bfff] bg-clip-text text-[3.2rem] leading-none font-extrabold tracking-tight text-transparent">
@@ -58,6 +62,9 @@ export default function LandingPage() {
             Sonara turns a recording into sheet music, Braille music notation, and spoken
             narration -- so a blind or low-vision musician can read a piece straight from
             audio, not wait on a manual transcription.
+          </p>
+          <p className="mt-4 mb-0 max-w-[42ch] text-[0.8rem] font-semibold tracking-[0.08em] text-brand uppercase">
+            An AI driven pipeline for music transcription, Braille conversion, and transposition
           </p>
         </div>
 
