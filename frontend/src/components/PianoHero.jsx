@@ -1,62 +1,45 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { usePianoTone } from '../hooks/usePianoTone'
 import { SoundWaveIcon } from './Icons'
 
-// A chromatic run (C4-F5), rendered as uniform keys -- no separate white/
-// black key shapes. Each key gets a gradient "fill" at the bottom instead,
-// so the whole row reads like a continuous ribbon/equalizer rather than a
-// traditional keyboard. This also sidesteps the black-key-overlap bugs a
-// two-shape layout kept running into (see git history) -- one shape, one
-// simple flex row, nothing to misalign.
-const KEYS = [
+// Two octaves, C4-B5, laid out as a real keyboard: white keys in a flat row
+// spanning the full width, black keys positioned over the boundaries between
+// them (skipping E-F and B-C, which have no sharp/flat in between).
+const WHITE_KEYS = [
   { note: 'C4', label: 'C4', freq: 261.63 },
-  { note: 'C#4', label: 'C♯4', freq: 277.18 },
   { note: 'D4', label: 'D4', freq: 293.66 },
-  { note: 'D#4', label: 'D♯4', freq: 311.13 },
   { note: 'E4', label: 'E4', freq: 329.63 },
   { note: 'F4', label: 'F4', freq: 349.23 },
-  { note: 'F#4', label: 'F♯4', freq: 369.99 },
   { note: 'G4', label: 'G4', freq: 392.0 },
-  { note: 'G#4', label: 'G♯4', freq: 415.3 },
   { note: 'A4', label: 'A4', freq: 440.0 },
-  { note: 'A#4', label: 'A♯4', freq: 466.16 },
   { note: 'B4', label: 'B4', freq: 493.88 },
   { note: 'C5', label: 'C5', freq: 523.25 },
-  { note: 'C#5', label: 'C♯5', freq: 554.37 },
   { note: 'D5', label: 'D5', freq: 587.33 },
-  { note: 'D#5', label: 'D♯5', freq: 622.25 },
   { note: 'E5', label: 'E5', freq: 659.25 },
   { note: 'F5', label: 'F5', freq: 698.46 },
+  { note: 'G5', label: 'G5', freq: 783.99 },
+  { note: 'A5', label: 'A5', freq: 880.0 },
+  { note: 'B5', label: 'B5', freq: 987.77 },
 ]
 
-const NOTE_BY_ID = Object.fromEntries(KEYS.map((k) => [k.note, k]))
+// afterWhiteIndex: this black key sits centered on the boundary right after
+// WHITE_KEYS[afterWhiteIndex] -- e.g. 0 means the C#/Db between C and D.
+const BLACK_KEYS = [
+  { note: 'C#4', label: 'C♯4', freq: 277.18, afterWhiteIndex: 0 },
+  { note: 'D#4', label: 'D♯4', freq: 311.13, afterWhiteIndex: 1 },
+  { note: 'F#4', label: 'F♯4', freq: 369.99, afterWhiteIndex: 3 },
+  { note: 'G#4', label: 'G♯4', freq: 415.3, afterWhiteIndex: 4 },
+  { note: 'A#4', label: 'A♯4', freq: 466.16, afterWhiteIndex: 5 },
+  { note: 'C#5', label: 'C♯5', freq: 554.37, afterWhiteIndex: 7 },
+  { note: 'D#5', label: 'D♯5', freq: 622.25, afterWhiteIndex: 8 },
+  { note: 'F#5', label: 'F♯5', freq: 739.99, afterWhiteIndex: 10 },
+  { note: 'G#5', label: 'G♯5', freq: 830.61, afterWhiteIndex: 11 },
+  { note: 'A#5', label: 'A♯5', freq: 932.33, afterWhiteIndex: 12 },
+]
+
+const NOTE_BY_ID = Object.fromEntries([...WHITE_KEYS, ...BLACK_KEYS].map((k) => [k.note, k]))
 const MAX_PREVIEW_NOTES = 5
 const REPLAY_GAP_MS = 420
-
-// Blends two sine waves at different frequencies/phases so the row curves
-// like a real S-shaped ribbon (roughly 1.5 "humps") rather than a single
-// symmetric arc. Rotation tracks the wave's own slope (its derivative),
-// so keys visually align with the curve instead of tilting independently
-// of it. Both amplitudes are modest on purpose -- getBoundingClientRect()
-// on a rotated element returns its axis-aligned bounding box, not its true
-// footprint, so a click aimed at that box's center can miss the key (or
-// land on a neighbor) once the angle gets large; verified by driving every
-// key with real click events.
-function waveTransform(t) {
-  const angle = t * Math.PI * 2.6
-  const lift = -(Math.sin(angle) * 0.7 + Math.sin(angle * 0.5 + 1.1) * 0.3) * 62
-  const rotate = (Math.cos(angle) * 0.7 + Math.cos(angle * 0.5 + 1.1) * 0.15) * 9
-  return `rotate(${rotate.toFixed(1)}deg) translateY(${lift.toFixed(1)}px)`
-}
-
-// Height of each key's gradient "fill", as a fraction of the key's own
-// height -- a different sine frequency/phase than the position wave so the
-// fill heights read as organic variation (like an equalizer) rather than
-// simply tracking how high each key sits.
-function fillFraction(t) {
-  const raw = 0.48 + Math.sin(t * Math.PI * 3.4 + 0.6) * 0.28
-  return Math.min(0.82, Math.max(0.22, raw))
-}
 
 /** Decorative interactive piano banner shown above the tool tabs -- not a
  * tab itself, just something to scroll past on the way to the actual
@@ -68,8 +51,32 @@ export default function PianoHero() {
   const [playedNotes, setPlayedNotes] = useState([])
   const [isReplaying, setIsReplaying] = useState(false)
   const timeoutsRef = useRef([])
+  const containerRef = useRef(null)
+  const whiteKeyRefs = useRef([])
+  const [blackKeyOffsets, setBlackKeyOffsets] = useState([])
 
   useEffect(() => () => timeoutsRef.current.forEach(clearTimeout), [])
+
+  // Black keys are positioned from the *measured* pixel edges of the white
+  // keys they sit between (offsetLeft/offsetWidth), not a hand-derived
+  // percentage formula -- a formula that didn't account for the row's own
+  // padding is exactly what caused the first black key to smother the first
+  // white key in an earlier version of this component (see git history).
+  // Recomputed on resize since the white keys' widths are flex-driven.
+  useLayoutEffect(() => {
+    function measure() {
+      const container = containerRef.current
+      if (!container) return
+      const offsets = BLACK_KEYS.map((key) => {
+        const beforeEl = whiteKeyRefs.current[key.afterWhiteIndex]
+        return beforeEl ? beforeEl.offsetLeft + beforeEl.offsetWidth : null
+      })
+      setBlackKeyOffsets(offsets)
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [])
 
   const handlePlay = (key) => {
     playNote(key.freq)
@@ -91,33 +98,40 @@ export default function PianoHero() {
   return (
     <div className="absolute inset-0 flex items-center justify-center">
       <div
-        className="relative mx-auto flex h-[62%] w-full max-w-[1600px] items-end gap-[3px] px-[5vw] pt-5 pb-[45px]"
+        ref={containerRef}
+        className="relative mx-auto flex h-[62%] w-full max-w-[1600px] items-stretch"
         role="group"
         aria-label="Interactive piano keyboard -- play a few notes"
       >
-        {KEYS.map((key, i) => {
-          const t = i / (KEYS.length - 1)
+        {WHITE_KEYS.map((key, i) => (
+          <button
+            key={key.note}
+            ref={(el) => { whiteKeyRefs.current[i] = el }}
+            type="button"
+            className="relative z-0 h-full min-w-0 flex-1 cursor-pointer rounded-b-md border-x border-b border-black/10 bg-white shadow-(--shadow-s) transition-[filter] duration-150 ease-out first:rounded-l-lg first:border-l-0 last:rounded-r-lg last:border-r-0 hover:brightness-95 focus:z-20 focus:brightness-95 focus:outline-[3px] focus:-outline-offset-4 focus:outline-brand"
+            aria-label={`Play ${key.note}`}
+            onClick={() => handlePlay(key)}
+          />
+        ))}
+
+        {BLACK_KEYS.map((key, i) => {
+          const left = blackKeyOffsets[i]
+          if (left == null) return null
           return (
             <button
               key={key.note}
               type="button"
-              className="relative h-[min(320px,34vh)] min-w-0 flex-1 origin-bottom cursor-pointer overflow-hidden rounded-lg bg-surface p-0 shadow-(--shadow-s) transition-[filter] duration-150 ease-out hover:brightness-[1.06] focus:brightness-[1.06] focus:outline-[3px] focus:outline-offset-2 focus:outline-brand"
-              style={{ transform: waveTransform(t) }}
+              className="absolute top-0 z-10 h-[60%] w-[6.5%] max-w-9 -translate-x-1/2 cursor-pointer rounded-b-md bg-[#18161d] shadow-[0_3px_6px_rgba(0,0,0,0.45)] transition-[filter] duration-150 ease-out hover:brightness-125 focus:z-20 focus:brightness-125 focus:outline-[3px] focus:outline-offset-1 focus:outline-brand"
+              style={{ left }}
               aria-label={`Play ${key.note.replace('#', ' sharp ')}`}
               onClick={() => handlePlay(key)}
-            >
-              <span
-                className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-b from-[#6d28d9] to-[#f97316] dark:from-[#a78bfa] dark:to-[#fb923c]"
-                style={{ height: `${(fillFraction(t) * 100).toFixed(0)}%` }}
-                aria-hidden="true"
-              />
-            </button>
+            />
           )
         })}
       </div>
 
       <div
-        className="empty:hidden absolute bottom-8 left-1/2 z-2 max-w-[min(480px,90vw)] -translate-x-1/2 rounded-(--radius-m) border border-border bg-surface px-6 py-4 text-center shadow-(--shadow-m)"
+        className="empty:hidden absolute bottom-8 left-1/2 z-30 max-w-[min(480px,90vw)] -translate-x-1/2 rounded-(--radius-m) border border-border bg-surface px-6 py-4 text-center shadow-(--shadow-m)"
         aria-live="polite"
       >
         {playedNotes.length > 0 && playedNotes.length < MAX_PREVIEW_NOTES && (
@@ -173,7 +187,7 @@ export default function PianoHero() {
 
       {playedNotes.length === 0 && (
         <div
-          className="absolute bottom-6 left-1/2 z-2 flex -translate-x-1/2 animate-bob flex-col items-center gap-0.5 text-xs font-semibold tracking-wider text-dim uppercase"
+          className="absolute bottom-6 left-1/2 z-30 flex -translate-x-1/2 animate-bob flex-col items-center gap-0.5 text-xs font-semibold tracking-wider text-dim uppercase"
           aria-hidden="true"
         >
           <span>Scroll for the tools</span>
